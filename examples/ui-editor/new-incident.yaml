@@ -1,0 +1,31 @@
+# Paste the whole of this file into:
+#   Settings -> Automations & scenes -> Create automation
+#   -> ⋮ (top right) -> Edit in YAML   [replace what is there]
+#
+# This is a single automation OBJECT, with no leading "- " and no "id:".
+# The UI editor expects one object; handing it a list makes Home Assistant
+# answer "Message malformed: not a valid option at '['0']'", because the
+# frontend turns the list into an object keyed "0".
+#
+# Home Assistant assigns the id itself when you save.
+# Replace notify.mobile_app_your_phone with your own notify service.
+
+alias: "Brottsplatskartan: new incident"
+description: >-
+  Rich notification per new incident, with the API's static map image
+  attached. Uses the bus event rather than the event entity, because several
+  incidents can arrive in one poll and the entity only holds the most recent.
+mode: queued
+max: 10
+triggers:
+  - trigger: event
+    event_type: brottsplatskartan_local_new_incident
+conditions: []
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: "{{ trigger.event.data.type }} — {{ trigger.event.data.place }}"
+      message: "{{ trigger.event.data.description or trigger.event.data.title }}"
+      data:
+        image: "{{ trigger.event.data.image_wide }}"
+        url: "{{ trigger.event.data.url }}"

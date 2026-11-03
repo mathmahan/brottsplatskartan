@@ -144,15 +144,24 @@ the whole configuration.
 per-crime-type sensor) and `recorder:` exclusions. If you already have a
 `template:` or `recorder:` key, merge the items into the one you have.
 
-**`examples/automations.yaml`** → append to your `automations.yaml`, keeping
-the leading `- `. Two automations: a rich mobile notification carrying the
-API's map image, and one filtered to incidents within 1 km.
+Two automations are provided, in two shapes — pick whichever route you use:
 
-Better still for the automations: **Settings → Automations & scenes → Create
-automation → ⋮ → Edit in YAML**, then paste one automation's body without its
-leading `- `. Home Assistant assigns the id and the automation stays editable
-in the UI. Note that Home Assistant rewrites `automations.yaml` whenever you
-save an automation in the UI, which strips hand-written comments.
+**`examples/ui-editor/*.yaml`** → one file per automation, for the UI. Go to
+**Settings → Automations & scenes → Create automation → ⋮ → Edit in YAML**
+and paste a whole file, replacing what is there. Home Assistant assigns the id
+and the automation stays editable in the UI.
+
+> Each of those files is a single automation **object**. If you paste a list —
+> anything starting with `- ` — Home Assistant answers *"Message malformed:
+> not a valid option at `['0']`"*, because the frontend turns the list into an
+> object keyed `"0"` and the automation schema has no such option. That is the
+> error to expect if you paste from `automations.yaml` by mistake.
+
+**`examples/automations.yaml`** → the same two automations as a list, for
+appending to the file `automation: !include automations.yaml` points at,
+leading `- ` and all. Note that Home Assistant rewrites `automations.yaml`
+whenever you save any automation in the UI, which strips hand-written
+comments.
 
 Both need a restart. Replace `notify.mobile_app_your_phone` with your own
 notify service.
@@ -254,6 +263,7 @@ tests/test_yaml_import.py   a real configuration.yaml block through the import
 tests/stubs/                minimal Home Assistant modules, so tests need no install
 dashboard.yaml                 a complete dashboard, 8 cards
 examples/configuration.yaml    template sensors + recorder excludes
-examples/automations.yaml      two notification automations
+examples/automations.yaml      two automations, as a list for automations.yaml
+examples/ui-editor/            the same two, one object each, for the UI editor
 tests/test_examples.py         structural checks on the files above
 ```

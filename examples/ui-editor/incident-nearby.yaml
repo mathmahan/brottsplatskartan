@@ -1,0 +1,32 @@
+# Paste the whole of this file into:
+#   Settings -> Automations & scenes -> Create automation
+#   -> ⋮ (top right) -> Edit in YAML   [replace what is there]
+#
+# This is a single automation OBJECT, with no leading "- " and no "id:".
+# Replace notify.mobile_app_your_phone with your own notify service.
+
+alias: "Brottsplatskartan: incident within 1 km"
+description: >-
+  Only notifies for incidents close to home. distance() returns kilometres
+  from the home zone.
+mode: queued
+max: 10
+triggers:
+  - trigger: event
+    event_type: brottsplatskartan_local_new_incident
+conditions:
+  - condition: template
+    value_template: >-
+      {% set lat = trigger.event.data.latitude %}
+      {% set lng = trigger.event.data.longitude %}
+      {{ lat is not none and lng is not none
+         and distance(lat, lng) is not none
+         and distance(lat, lng) | float < 1 }}
+actions:
+  - action: notify.mobile_app_your_phone
+    data:
+      title: >-
+        {{ trigger.event.data.type }}
+        {{ distance(trigger.event.data.latitude,
+                    trigger.event.data.longitude) | round(1) }} km bort
+      message: "{{ trigger.event.data.title }}"

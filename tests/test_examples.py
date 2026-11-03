@@ -127,6 +127,35 @@ def main():
           [a["alias"] for a in autos
            if {"trigger", "action", "condition"} & set(a)], [])
 
+    # ---------------- examples/ui-editor/*.yaml ----------------
+    # These are for the automation editor's YAML mode, which takes ONE
+    # automation object. Handing it a list makes the frontend send an object
+    # keyed "0", and Home Assistant answers "not a valid option at '['0']'".
+    ui_files = sorted((ROOT / "examples" / "ui-editor").glob("*.yaml"))
+    check("there are ui-editor examples", len(ui_files) > 0, True)
+    for path in ui_files:
+        doc = yaml.safe_load(path.read_text())
+        check(f"{path.name} is a single mapping, not a list",
+              isinstance(doc, dict), True)
+        if not isinstance(doc, dict):
+            continue
+        check(f"{path.name} carries no id (the UI assigns it)",
+              "id" not in doc, True)
+        check(f"{path.name} has alias/triggers/actions",
+              sorted({"alias", "triggers", "actions"} - set(doc)), [])
+        check(f"{path.name} uses modern trigger/action keys",
+              sorted({"trigger", "action", "condition"} & set(doc)), [])
+
+    # Every automation in automations.yaml should have a ui-editor counterpart,
+    # so neither set silently falls behind the other.
+    ui_aliases = {
+        yaml.safe_load(p.read_text())["alias"]
+        for p in ui_files
+        if isinstance(yaml.safe_load(p.read_text()), dict)
+    }
+    check("every automations.yaml entry has a ui-editor counterpart",
+          sorted({a["alias"] for a in autos} - ui_aliases), [])
+
     print()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED: {FAILURES}")
