@@ -1,0 +1,85 @@
+# ---------------------------------------------------------------------------
+# Brottsplatskartan (local) — the no-template dashboard.
+#
+# Every card here is a built-in Home Assistant card with no Jinja at all, so
+# all of it is editable in the visual editor: click a card, Edit, change what
+# you like. Use this if dashboard.yaml's markdown templates are more than you
+# want to maintain.
+#
+# Paste the whole file into:
+#   Settings -> Dashboards -> (your dashboard) -> pencil -> ⋮
+#   -> Raw configuration editor      [replace what is there]
+#
+# WHAT TO CHANGE: the entity ids, in the places marked below. A visual-editor
+# card cannot take a template, so the ids have to be literal — that is the one
+# trade for being clickable. The ids below assume the entry is named
+# "Brottsplatskartan Stockholm". Find yours under Developer Tools -> States by
+# searching for "brottsplatskartan".
+#
+# WHAT YOU GIVE UP vs dashboard.yaml: the per-crime-type breakdown, the
+# incident feed with descriptions and links, and the static map image. Those
+# need templating. You do not lose access to the detail, though — click any
+# marker on the map and the dialog shows the headline, description, place and
+# both links.
+# ---------------------------------------------------------------------------
+
+views:
+  - title: Brottsplatskartan
+    path: brottsplatskartan
+    icon: mdi:police-badge
+    cards:
+
+      # One marker per incident. Click a marker for the full detail.
+      # Do NOT add `hours_to_show` — it draws each marker twice.
+      - type: map
+        geo_location_sources:
+          - brottsplatskartan_local
+        auto_fit: true
+        theme_mode: auto
+
+      # The count. <<< entity id
+      - type: tile
+        entity: sensor.brottsplatskartan_stockholm_incidents
+        name: Händelser senaste dygnet
+        icon: mdi:police-badge
+
+      # The newest headline. <<< entity id
+      - type: tile
+        entity: sensor.brottsplatskartan_stockholm_latest_incident
+        name: Senaste händelsen
+        icon: mdi:alert-circle-outline
+
+      # Everything in one list; click a row for its attributes.
+      # <<< entity ids
+      - type: entities
+        title: Översikt
+        entities:
+          - entity: sensor.brottsplatskartan_stockholm_incidents
+            name: Antal senaste dygnet
+          - entity: sensor.brottsplatskartan_stockholm_latest_incident
+            name: Senaste händelsen
+          - entity: event.brottsplatskartan_stockholm_new_incident
+            name: Senaste larm
+          # Needs the template sensor from examples/configuration.yaml.
+          # Delete this row if you skipped it.
+          - entity: sensor.brottsplatskartan_nearest_incident
+            name: Närmaste händelse
+
+      # The last week. <<< entity id
+      - type: history-graph
+        title: Senaste veckan
+        entities:
+          - sensor.brottsplatskartan_stockholm_incidents
+        hours_to_show: 168
+
+      # Longer trend. Works with no extra setup, because the count sensor
+      # sets state_class: measurement. <<< entity id
+      - type: statistics-graph
+        title: Brottstrend
+        entities:
+          - sensor.brottsplatskartan_stockholm_incidents
+        stat_types:
+          - mean
+          - max
+        period: hour
+        days_to_show: 30

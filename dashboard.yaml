@@ -1,20 +1,25 @@
 # ---------------------------------------------------------------------------
-# Brottsplatskartan (local) — a complete dashboard.
+# Brottsplatskartan (local) — dashboard.
 #
-# This is a whole dashboard document, so it can be pasted straight into
-#   Settings -> Dashboards -> (your dashboard) -> pencil -> ⋮ -> Raw
-#   configuration editor
-# replacing what is there. To take just one card instead, use
-#   Add card -> Manual
-# and paste a single entry from under `cards:` (without its leading `- `
-# indentation offset — the editor expects the card object on its own).
+# Paste the whole file into:
+#   Settings -> Dashboards -> (your dashboard) -> pencil -> ⋮
+#   -> Raw configuration editor      [replace what is there]
+# For a single card: Add card -> Manual, then paste one entry from `cards:`.
 #
-# Entity ids assume the entry is named "Brottsplatskartan Stockholm", which is
-# what picking `Stockholm` at setup gives you. A different municipality list
-# changes the slug — check Developer Tools -> States and adjust.
+# NO ENTITY IDS TO EDIT. Each card finds its sensor through
+# integration_entities('brottsplatskartan_local'), so it works whatever your
+# entry is called and keeps working if you rename it.
 #
-# The last two cards need the template sensor from examples/configuration.yaml.
-# Without it they show as unavailable; delete them if you skip that part.
+# ALL VISIBLE TEXT IS IN ONE PLACE PER CARD. Every markdown card opens with a
+# "TEXT" block of {% set %} lines — change the strings there and nothing else.
+# Card headings are the plain `title:` keys.
+#
+# Prefer clicking to editing YAML? Use dashboard-simple.yaml instead: same
+# data, native cards only, no templates, fully editable in the visual editor.
+#
+# The last two cards need the template sensor from
+# examples/configuration.yaml. Without it they show as unavailable — delete
+# them if you skip that part.
 # ---------------------------------------------------------------------------
 
 views:
@@ -26,18 +31,13 @@ views:
       # =====================================================================
       # MAP — one marker per incident
       # =====================================================================
-      # The point of the geo_location platform. Markers appear and disappear
-      # as incidents enter and leave the rolling window; clicking one opens
-      # the more-info dialog with the headline, description and both links.
+      # Markers appear and disappear as incidents enter and leave the rolling
+      # window. Click one for the headline, description and both links.
       #
-      # `geo_location_sources` is required. Without it the card renders empty,
-      # which is the usual reason people think the platform is broken.
-      #
-      # Do NOT add `hours_to_show` here. It makes the card draw each entity's
+      # Do NOT add `hours_to_show`. It makes the card draw each entity's
       # recorded history as well as its current position, and an incident
       # never moves — so every marker gets a second pin at the same spot and
-      # the map appears to show everything twice. The integration's own
-      # rolling window already decides which markers exist.
+      # the map appears to show everything twice.
       - type: map
         geo_location_sources:
           - brottsplatskartan_local
@@ -50,14 +50,27 @@ views:
       - type: markdown
         title: Sammanfattning
         content: |-
-          {% set s = 'sensor.brottsplatskartan_stockholm_incidents' %}
-          ## {{ states(s) }} händelser senaste {{ state_attr(s, 'window_hours') }} h
+          {#- ===== TEXT — change these and nothing else ===== -#}
+          {% set t_incidents = "händelser senaste" %}
+          {% set t_hours = "h" %}
+          {% set t_in_county = "händelser i hela" %}
+          {% set t_same_period = "under samma period" %}
+          {% set t_none = "Inga händelser i fönstret." %}
+          {#- ===== end of text ===== -#}
+          {% set found = integration_entities('brottsplatskartan_local')
+               | select('search', '^sensor\..*_incidents$') | list %}
+          {% set s = found[0] if found else '' %}
+          {% if s %}
+          ## {{ states(s) }} {{ t_incidents }} {{ state_attr(s, 'window_hours') }} {{ t_hours }}
           {{ state_attr(s, 'municipalities') | join(', ') or state_attr(s, 'area') }}
 
           {% for type, n in (state_attr(s, 'by_type') or {}).items() -%}
           - **{{ type }}** — {{ n }}
           {% endfor %}
-          <sub>{{ state_attr(s, 'fetched_in_county') }} händelser i hela {{ state_attr(s, 'area') }} under samma period.</sub>
+          <sub>{{ state_attr(s, 'fetched_in_county') }} {{ t_in_county }} {{ state_attr(s, 'area') }} {{ t_same_period }}.</sub>
+          {% else %}
+          {{ t_none }}
+          {% endif %}
 
       # =====================================================================
       # LATEST INCIDENT, with the API's own static map image
@@ -69,11 +82,19 @@ views:
       - type: markdown
         title: Senaste händelsen
         content: |-
-          {% set s = 'sensor.brottsplatskartan_stockholm_latest_incident' %}
-          {% if states(s) not in ['unknown', 'unavailable'] %}
+          {#- ===== TEXT — change these and nothing else ===== -#}
+          {% set t_map_alt = "Karta" %}
+          {% set t_read_more = "Brottsplatskartan" %}
+          {% set t_police = "Polisen" %}
+          {% set t_none = "Ingen händelse i fönstret." %}
+          {#- ===== end of text ===== -#}
+          {% set found = integration_entities('brottsplatskartan_local')
+               | select('search', '^sensor\..*_latest_incident$') | list %}
+          {% set s = found[0] if found else '' %}
+          {% if s and states(s) not in ['unknown', 'unavailable'] %}
           ### {{ state_attr(s, 'type') }} — {{ state_attr(s, 'place') }}
 
-          ![Karta]({{ state_attr(s, 'image_wide') }})
+          ![{{ t_map_alt }}]({{ state_attr(s, 'image_wide') }})
 
           **{{ states(s) }}**
 
@@ -81,9 +102,9 @@ views:
 
           {{ state_attr(s, 'location') }} · {{ state_attr(s, 'date_human') }}
 
-          [Brottsplatskartan]({{ state_attr(s, 'url') }}){% if state_attr(s, 'source_url') %} · [Polisen]({{ state_attr(s, 'source_url') }}){% endif %}
+          [{{ t_read_more }}]({{ state_attr(s, 'url') }}){% if state_attr(s, 'source_url') %} · [{{ t_police }}]({{ state_attr(s, 'source_url') }}){% endif %}
           {% else %}
-          Ingen händelse i fönstret.
+          {{ t_none }}
           {% endif %}
 
       # =====================================================================
@@ -92,7 +113,15 @@ views:
       - type: markdown
         title: Händelser senaste dygnet
         content: |-
-          {% set rows = state_attr('sensor.brottsplatskartan_stockholm_incidents', 'incidents') or [] %}
+          {#- ===== TEXT — change these and nothing else ===== -#}
+          {% set t_police_report = "Polisens rapport" %}
+          {% set t_truncated = "Listan är kapad — höj \"Incidents listed in attributes\" i integrationens inställningar." %}
+          {% set t_none = "Inga händelser senaste dygnet." %}
+          {#- ===== end of text ===== -#}
+          {% set found = integration_entities('brottsplatskartan_local')
+               | select('search', '^sensor\..*_incidents$') | list %}
+          {% set s = found[0] if found else '' %}
+          {% set rows = state_attr(s, 'incidents') or [] if s else [] %}
           {% if rows %}
           {% for i in rows %}
           **{{ i.type }}** · {{ i.date_human }} · {{ i.place or i.municipality }}
@@ -100,16 +129,16 @@ views:
           [{{ i.title }}]({{ i.url }})
 
           {{ i.description }}
-          {%- if i.source_url %} · [Polisens rapport]({{ i.source_url }}){% endif %}
+          {%- if i.source_url %} · [{{ t_police_report }}]({{ i.source_url }}){% endif %}
           {% if not loop.last %}
           ---
           {% endif %}
           {%- endfor %}
-          {% if state_attr('sensor.brottsplatskartan_stockholm_incidents', 'truncated') %}
-          *Listan är kapad — höj "Incidents listed in attributes" i integrationens inställningar.*
+          {% if state_attr(s, 'truncated') %}
+          *{{ t_truncated }}*
           {% endif %}
           {% else %}
-          Inga händelser senaste dygnet.
+          {{ t_none }}
           {% endif %}
 
       # =====================================================================
@@ -117,6 +146,10 @@ views:
       # =====================================================================
       # The count sensor sets state_class: measurement, so long-term
       # statistics are recorded and this needs no extra configuration.
+      #
+      # These two take literal entity ids, because graph cards cannot take a
+      # template. If your entry is not named "Brottsplatskartan Stockholm",
+      # change the ids here (Developer Tools -> States to find them).
       - type: statistics-graph
         title: Brottstrend
         entities:
@@ -155,5 +188,10 @@ views:
         card:
           type: markdown
           content: |-
-            ### ⚠️ Händelse {{ states('sensor.brottsplatskartan_nearest_incident') }} km bort
-            {{ state_attr('sensor.brottsplatskartan_nearest_incident', 'headline') }}
+            {#- ===== TEXT — change these and nothing else ===== -#}
+            {% set t_nearby = "Händelse" %}
+            {% set t_away = "km bort" %}
+            {#- ===== end of text ===== -#}
+            {% set s = 'sensor.brottsplatskartan_nearest_incident' %}
+            ### ⚠️ {{ t_nearby }} {{ states(s) }} {{ t_away }}
+            {{ state_attr(s, 'headline') }}

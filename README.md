@@ -101,36 +101,57 @@ entity only holds the most recent).
 
 ## Dashboard
 
-`dashboard.yaml` is a **complete dashboard document**, so paste the whole file
-into:
+Two versions, same data. Pick by how you prefer to make changes.
+
+| | `dashboard.yaml` | `dashboard-simple.yaml` |
+|---|---|---|
+| Cards | 8 | 6 |
+| Entity ids to edit | none — auto-discovered | 6 places, marked `<<<` |
+| Editable in the visual editor | no (markdown templates) | **yes, every card** |
+| Per-crime-type breakdown | yes | no |
+| Incident feed with links | yes | no (click a map marker instead) |
+| Static map image | yes | no |
+
+Paste either whole file into:
 
 > Settings → Dashboards → *your dashboard* → ✏️ → ⋮ → **Raw configuration editor**
 
-To take a single card instead, use **Add card → Manual** and paste one entry
-from under `cards:`.
+For a single card, use **Add card → Manual** and paste one entry from
+under `cards:`.
 
-> If you paste `dashboard.yaml` into the raw editor and get *"Expected an
-> object, but received: \[object Object\],…"*, you have an older copy of the
-> file — it used to be a bare list of cards, which the raw editor rejects
-> because it wants a whole dashboard. Pull the latest version.
+### Changing the wording
 
-The eight cards:
+Every markdown card in `dashboard.yaml` opens with a block like this, and
+nothing outside it needs touching:
 
-1. **Map** — a marker per incident. Needs `geo_location_sources`; without it
-   the card renders empty.
-2. **Summary** — count plus a per-crime-type breakdown.
-3. **Latest incident** — rendered with the API's own static map image.
-4. **Feed** — type, relative time, place, description, and links to both
-   Brottsplatskartan and the police's own report.
-5. **Trend** — a 30-day statistics graph. Works out of the box, since the
-   count sensor sets `state_class: measurement`.
-6. **Last week** — a plain history graph.
-7. **Overview** — a compact entities card.
-8. **Proximity alert** — a conditional card that only appears when something
-   happened within 2 km.
+```jinja
+{#- ===== TEXT — change these and nothing else ===== -#}
+{% set t_incidents = "händelser senaste" %}
+{% set t_hours = "h" %}
+{% set t_in_county = "händelser i hela" %}
+{% set t_same_period = "under samma period" %}
+{% set t_none = "Inga händelser i fönstret." %}
+{#- ===== end of text ===== -#}
+```
 
-The last two need the `nearest_incident` template sensor below; without it
-they show as unavailable. Delete them if you skip it.
+Card headings are the plain `title:` keys, so those are ordinary YAML.
+
+### No entity ids to edit
+
+The templated cards find their sensors through
+`integration_entities('brottsplatskartan_local')`, so they work whatever your
+config entry is named and keep working if you rename it. Only the two graph
+cards take literal ids, because graph cards cannot take a template.
+
+`dashboard-simple.yaml` uses literal ids throughout — that is the trade for
+being clickable in the visual editor, which cannot evaluate a template. The
+spots to change are marked `<<< entity id`.
+
+### What the simple version gives up
+
+The breakdown, the feed and the map image all need templating. You keep access
+to the detail either way: click any map marker and the dialog shows the
+headline, description, place and both links.
 
 ### The rest: template sensors, automations, recorder
 
@@ -325,7 +346,8 @@ tests/test_real_schema.py   parsing and filtering against real captured rows
 tests/test_config_flow.py   flow schemas and defaults
 tests/test_yaml_import.py   a real configuration.yaml block through the import
 tests/stubs/                minimal Home Assistant modules, so tests need no install
-dashboard.yaml                 a complete dashboard, 8 cards
+dashboard.yaml                 8 cards, auto-discovered ids, text hoisted
+dashboard-simple.yaml          6 native cards, no templates, UI-editable
 examples/configuration.yaml    template sensors + recorder excludes
 examples/automations.yaml      two automations, as a list for automations.yaml
 examples/ui-editor/            the same two, one object each, for the UI editor

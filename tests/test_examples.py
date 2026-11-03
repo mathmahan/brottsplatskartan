@@ -18,6 +18,8 @@ import yaml
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FAILURES = []
 
+import re  # noqa: E402
+
 # Keys a stock configuration.yaml already defines, usually via !include.
 # Anything we tell people to append must avoid them.
 RESERVED_KEYS = {
@@ -69,6 +71,15 @@ def check(name, got, want):
         FAILURES.append(name)
 
 
+JINJA = re.compile(r"\{\{|\{%|\{#")
+# Entity ids the integration creates. A templated card must discover these
+# through integration_entities(), not hardcode them, so the cards keep working
+# when the config entry is renamed.
+INTEGRATION_IDS = re.compile(
+    r"sensor\.brottsplatskartan_\w*_(incidents|latest_incident)\b"
+)
+
+
 def walk(cards):
     """Yield every card, descending into conditional and stack wrappers."""
     for card in cards:
@@ -79,31 +90,73 @@ def walk(cards):
             yield from walk(card["cards"])
 
 
-def main():
-    # ---------------- dashboard.yaml ----------------
-    doc = yaml.safe_load((ROOT / "dashboard.yaml").read_text())
-    check("dashboard is a mapping, not a bare card list",
-          isinstance(doc, dict), True)
-    check("dashboard's only top-level key is 'views'", sorted(doc), ["views"])
-    check("views is a list", isinstance(doc["views"], list), True)
-
-    cards = [c for v in doc["views"] for c in walk(v.get("cards", []))]
-    check("dashboard has cards", len(cards) > 0, True)
-    check("every card declares a type",
+def cards_of(path):
+    """Load a dashboard file and return its cards, checking the outer shape."""
+    doc = yaml.safe_load(path.read_text())
+    name = path.name
+    check(f"{name} is a mapping, not a bare card list", isinstance(doc, dict), True)
+    if not isinstance(doc, dict):
+        return []
+    check(f"{name}'s only top-level key is 'views'", sorted(doc), ["views"])
+    check(f"{name}: views is a list", isinstance(doc.get("views"), list), True)
+    cards = [c for v in doc.get("views", []) for c in walk(v.get("cards", []))]
+    check(f"{name} has cards", len(cards) > 0, True)
+    check(f"{name}: every card declares a type",
           [c for c in cards if "type" not in c], [])
-    check("every view has a title",
-          [v for v in doc["views"] if not v.get("title")], [])
+    check(f"{name}: every view has a title",
+          [v for v in doc.get("views", []) if not v.get("title")], [])
 
-    # A map card must not set hours_to_show: it draws recorded history as
-    # well as current positions, and since an incident never moves that puts
-    # a second pin on top of every marker.
+    # A map card must not set hours_to_show: it draws recorded history as well
+    # as current positions, and since an incident never moves that puts a
+    # second pin on top of every marker.
     maps = [c for c in cards if c.get("type") == "map"]
-    check("there is a map card", len(maps) > 0, True)
-    check("no map card sets hours_to_show",
+    check(f"{name} has a map card", len(maps) > 0, True)
+    check(f"{name}: no map card sets hours_to_show",
           [c for c in maps if "hours_to_show" in c], [])
-    check("every map card names the geo_location source",
+    check(f"{name}: every map card names the geo_location source",
           [c for c in maps if "brottsplatskartan_local"
            not in (c.get("geo_location_sources") or [])], [])
+    return cards
+
+
+def main():
+    # ---------------- dashboard.yaml (templated) ----------------
+    cards = cards_of(ROOT / "dashboard.yaml")
+    markdown = [c for c in cards if c.get("type") == "markdown" and c.get("content")]
+    check("dashboard.yaml has markdown cards", len(markdown) > 0, True)
+
+    for card in markdown:
+        label = card.get("title") or "conditional card"
+        body = card["content"]
+        # Every visible string belongs in the card's TEXT block, so a user
+        # changing wording edits one block instead of hunting through markup.
+        check(f"{label}: has a TEXT block", "===== TEXT" in body, True)
+        check(f"{label}: has a set of text variables",
+              len(re.findall(r"\{% set t_\w+", body)) > 0, True)
+
+    # The integration's own sensors must be discovered, not hardcoded. The
+    # nearest-incident sensor is exempt: it is a user-created template sensor
+    # from examples/configuration.yaml, so there is nothing to discover it by.
+    for card in markdown:
+        label = card.get("title") or "conditional card"
+        hardcoded = INTEGRATION_IDS.findall(card["content"])
+        check(f"{label}: no hardcoded integration entity id", hardcoded, [])
+
+    check("templated cards use integration_entities()",
+          len([c for c in markdown if "integration_entities(" in c["content"]]) >= 3,
+          True)
+
+    # ---------------- dashboard-simple.yaml (no templates) ----------------
+    simple_path = ROOT / "dashboard-simple.yaml"
+    check("the no-template dashboard exists", simple_path.exists(), True)
+    simple = cards_of(simple_path)
+    jinja_cards = [
+        c["type"] for c in simple
+        if JINJA.search(yaml.dump(c, allow_unicode=True))
+    ]
+    check("dashboard-simple.yaml contains no Jinja at all", jinja_cards, [])
+    check("dashboard-simple.yaml uses only built-in card types",
+          [c["type"] for c in simple if c["type"].startswith("custom:")], [])
 
     # ---------------- examples/configuration.yaml ----------------
     cfg_text = (ROOT / "examples" / "configuration.yaml").read_text()
