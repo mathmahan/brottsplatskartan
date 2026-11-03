@@ -144,6 +144,73 @@ def main():
     check("area is not duplicated into options",
           const.CONF_AREA in created["options"], False)
 
+    # --- entry identity is order-independent ---
+    uid = cf._entry_unique_id
+    check("same places in a different order give the same id",
+          uid("Stockholms län", ["Solna", "Stockholm"]),
+          uid("Stockholms län", ["Stockholm", "Solna"]))
+    check("suffix spellings give the same id",
+          uid("Stockholms län", ["Stockholms kommun"]),
+          uid("Stockholms län", ["Stockholm"]))
+    check("case does not matter",
+          uid("Stockholms län", ["STOCKHOLM"]), uid("Stockholms län", ["Stockholm"]))
+    check("duplicates within the list collapse",
+          uid("Stockholms län", ["Stockholm", "Stockholm"]),
+          uid("Stockholms län", ["Stockholm"]))
+    check("a different place set is a different entry",
+          uid("Stockholms län", ["Stockholm"]) != uid("Stockholms län", ["Nacka"]), True)
+    check("whole county differs from a filtered entry",
+          uid("Stockholms län", []) != uid("Stockholms län", ["Stockholm"]), True)
+    check("a different county is a different entry",
+          uid("Stockholms län", []) != uid("Skåne län", []), True)
+
+    # --- a second entry over the same places is refused ---
+    from homeassistant.config_entries import AbortFlow
+
+    existing = uid("Stockholms län", ["Stockholm"])
+    flow = cf.BpkConfigFlow()
+    flow.configured_unique_ids = {existing}
+    flow._area = "Stockholms län"
+    try:
+        asyncio.run(flow.async_step_places({
+            # Same place, written differently and in another order.
+            const.CONF_MUNICIPALITIES: ["stockholms kommun"],
+            const.CONF_HOURS: 24.0, const.CONF_UPDATE_INTERVAL: 15.0,
+            const.CONF_MAX_ATTRIBUTE_INCIDENTS: 25.0,
+            const.CONF_MAX_MARKERS: 100.0, const.CONF_MAX_PAGES: 6.0,
+        }))
+        check("duplicate entry refused", "created", "aborted")
+    except AbortFlow as err:
+        check("duplicate entry refused with already_configured", err.reason,
+              "already_configured")
+
+    # The YAML import must abort the same way, so a leftover block does not
+    # add a second entry beside one added in the UI.
+    flow = cf.BpkConfigFlow()
+    flow.configured_unique_ids = {existing}
+    try:
+        asyncio.run(flow.async_step_import({
+            const.CONF_AREA: "Stockholms län",
+            const.CONF_MUNICIPALITIES: ["Stockholm"],
+        }))
+        check("duplicate import refused", "created", "aborted")
+    except AbortFlow as err:
+        check("duplicate import refused with already_configured", err.reason,
+              "already_configured")
+
+    # A genuinely different place set still goes through.
+    flow = cf.BpkConfigFlow()
+    flow.configured_unique_ids = {existing}
+    flow._area = "Stockholms län"
+    other = asyncio.run(flow.async_step_places({
+        const.CONF_MUNICIPALITIES: ["Nacka"],
+        const.CONF_HOURS: 24.0, const.CONF_UPDATE_INTERVAL: 15.0,
+        const.CONF_MAX_ATTRIBUTE_INCIDENTS: 25.0,
+        const.CONF_MAX_MARKERS: 100.0, const.CONF_MAX_PAGES: 6.0,
+    }))
+    check("a different municipality is still allowed",
+          other["title"], "Brottsplatskartan Nacka")
+
     # --- the first step offers every county ---
     form = asyncio.run(cf.BpkConfigFlow().async_step_user())
     check("county step is a form", form["type"], "form")

@@ -17,7 +17,12 @@ from homeassistant.core import callback
 from homeassistant.helpers import selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .api import BpkError, BpkRateLimited, async_discover_municipalities
+from .api import (
+    BpkError,
+    BpkRateLimited,
+    async_discover_municipalities,
+    normalize_place,
+)
 from .const import (
     AREAS,
     CONF_APP_ID,
@@ -121,6 +126,21 @@ def _coerce_ints(options: dict[str, Any]) -> dict[str, Any]:
     return options
 
 
+def _entry_unique_id(area: str, municipalities: list[str]) -> str:
+    """Stable identity for an entry: its county plus the places it filters to.
+
+    Normalized and sorted, so ["Solna", "Stockholm"] and
+    ["Stockholm", "Solna"] are the same entry. `_async_abort_entries_match`
+    compares the stored list by equality, which means a reordered list slips
+    past it and a second entry gets created — two entries over the same
+    incidents, which shows up as every incident appearing twice on the map.
+    """
+    places = sorted(
+        {norm for name in municipalities if (norm := normalize_place(name)) is not None}
+    )
+    return f"{area.strip().lower()}|{','.join(places)}"
+
+
 def _title(area: str, municipalities: list[str]) -> str:
     """Entry title, which also becomes the device name and entity prefix."""
     if municipalities:
@@ -196,10 +216,11 @@ class BpkConfigFlow(ConfigFlow, domain=DOMAIN):
                 if name.strip()
             ]
             # Allow several entries for one county with different place sets,
-            # but not two identical ones.
-            self._async_abort_entries_match(
-                {CONF_AREA: self._area, CONF_MUNICIPALITIES: municipalities}
+            # but not two covering the same places.
+            await self.async_set_unique_id(
+                _entry_unique_id(self._area, municipalities)
             )
+            self._abort_if_unique_id_configured()
             return self.async_create_entry(
                 title=_title(self._area, municipalities),
                 data={CONF_AREA: self._area, CONF_APP_ID: self._app_id},
@@ -234,9 +255,8 @@ class BpkConfigFlow(ConfigFlow, domain=DOMAIN):
         """Create an entry from a legacy `configuration.yaml` block."""
         area = import_data.get(CONF_AREA, DEFAULT_AREA)
         municipalities = list(import_data.get(CONF_MUNICIPALITIES) or [])
-        self._async_abort_entries_match(
-            {CONF_AREA: area, CONF_MUNICIPALITIES: municipalities}
-        )
+        await self.async_set_unique_id(_entry_unique_id(area, municipalities))
+        self._abort_if_unique_id_configured()
 
         options = {
             CONF_MUNICIPALITIES: municipalities,
@@ -287,10 +307,14 @@ class BpkOptionsFlow(OptionsFlow):
             options = _coerce_ints(
                 {**user_input, CONF_MUNICIPALITIES: municipalities}
             )
-            # Keep the title in step with the places being watched, so the
-            # device and entity names stay meaningful after a change.
+            # Keep the title and the unique id in step with the places being
+            # watched: the title so device and entity names stay meaningful,
+            # the unique id so a later entry covering the same places is still
+            # recognised as a duplicate.
             self.hass.config_entries.async_update_entry(
-                entry, title=_title(area, municipalities)
+                entry,
+                title=_title(area, municipalities),
+                unique_id=_entry_unique_id(area, municipalities),
             )
             return self.async_create_entry(data=options)
 

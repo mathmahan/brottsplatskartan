@@ -185,6 +185,44 @@ Confirmed against a live response (Stockholms län, November 2026):
 | `image` / `image_far` | map thumbnails | pre-rendered static maps |
 | `date_human` | relative time | e.g. `49 minuter sedan` |
 
+## Troubleshooting
+
+### Every incident appears twice on the map
+
+Two causes, in order of likelihood.
+
+**1. The map card has `hours_to_show`.** That option makes the card draw each
+entity's *recorded history* as well as its current position. An incident never
+moves, so every marker gets a second pin at exactly the same spot. Remove the
+line — the integration's rolling window already decides which markers exist.
+The card in `dashboard.yaml` no longer sets it.
+
+**2. You have two config entries covering the same incidents.** Check
+**Settings → Devices & services → Brottsplatskartan (local)**: if there are
+two entries — say one for `Stockholm` from an imported YAML block and one for
+the whole county added in the UI — every Stockholm incident gets a marker from
+each. Delete whichever you do not want.
+
+This was easier to end up with than it should have been: entries are now
+identified by county plus their normalized, sorted place list, so a second
+entry over the same places is refused. Previously the check compared the place
+list by equality, so `[Solna, Stockholm]` and `[Stockholm, Solna]` were treated
+as different.
+
+To count what you actually have, in **Developer Tools → Template**:
+
+```jinja
+{{ states.geo_location
+   | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+   | list | count }} markers
+{{ states.geo_location
+   | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+   | map(attribute='attributes.incident_id') | unique | list | count }} distinct incidents
+```
+
+If those two numbers differ, it is cause 2 — duplicate entries. If they match
+but the map still looks doubled, it is cause 1 — the card.
+
 ## If the count is 0 but the county has incidents
 
 The municipality filter found nothing to match. The count sensor then exposes a

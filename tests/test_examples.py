@@ -94,6 +94,17 @@ def main():
     check("every view has a title",
           [v for v in doc["views"] if not v.get("title")], [])
 
+    # A map card must not set hours_to_show: it draws recorded history as
+    # well as current positions, and since an incident never moves that puts
+    # a second pin on top of every marker.
+    maps = [c for c in cards if c.get("type") == "map"]
+    check("there is a map card", len(maps) > 0, True)
+    check("no map card sets hours_to_show",
+          [c for c in maps if "hours_to_show" in c], [])
+    check("every map card names the geo_location source",
+          [c for c in maps if "brottsplatskartan_local"
+           not in (c.get("geo_location_sources") or [])], [])
+
     # ---------------- examples/configuration.yaml ----------------
     cfg_text = (ROOT / "examples" / "configuration.yaml").read_text()
     cfg = yaml.safe_load(cfg_text)

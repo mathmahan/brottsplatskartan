@@ -32,14 +32,17 @@ views:
       #
       # `geo_location_sources` is required. Without it the card renders empty,
       # which is the usual reason people think the platform is broken.
+      #
+      # Do NOT add `hours_to_show` here. It makes the card draw each entity's
+      # recorded history as well as its current position, and an incident
+      # never moves — so every marker gets a second pin at the same spot and
+      # the map appears to show everything twice. The integration's own
+      # rolling window already decides which markers exist.
       - type: map
         geo_location_sources:
           - brottsplatskartan_local
         auto_fit: true
         theme_mode: auto
-        # Drop `hours_to_show` to have markers vanish the moment they leave
-        # the window, rather than lingering on the map's own history.
-        hours_to_show: 24
 
       # =====================================================================
       # SUMMARY — count and per-crime-type breakdown
