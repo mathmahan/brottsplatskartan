@@ -18,11 +18,44 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 URL = "https://brottsplatskartan.se/api/events"
+# Same key order and matching rules as the integration's api.py, so the
+# numbers this prints are the numbers the sensor will show.
 LOCATION_KEYS = (
-    "administrative_area_level_2", "admin_area_level_2", "administrative_area",
-    "admin_area", "kommun", "municipality", "title_location", "location_string",
-    "location", "city", "place",
+    "title_location", "administrative_area_level_2", "admin_area_level_2",
+    "kommun", "municipality", "city",
+    "location_string_2", "location_string", "location",
 )
+PLACE_SUFFIXES = (" kommun", " stad", " municipality")
+
+
+def normalize_place(value):
+    """Mirror of api.normalize_place: comparable form, or None for a county."""
+    if not isinstance(value, str):
+        return None
+    text = value.strip().lower()
+    if not text or text.endswith(" län") or text.endswith(" lan"):
+        return None
+    for suffix in PLACE_SUFFIXES:
+        if text.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    text = text.strip()
+    if text.endswith("s"):
+        text = text[:-1]
+    return text or None
+
+
+def place_candidates(row):
+    """Every place a row mentions. Comma-separated fields are split up."""
+    out = set()
+    for key in LOCATION_KEYS:
+        value = row.get(key)
+        if not isinstance(value, str):
+            continue
+        for part in value.split(","):
+            if (norm := normalize_place(part)) is not None:
+                out.add(norm)
+    return out
 
 
 def fetch(area: str, app: str = "ha-probe", max_pages: int = 6) -> list[dict]:
@@ -84,14 +117,10 @@ def main() -> int:
         print(f"  published in the {label}: {len(inw)}")
 
     if wanted:
+        want = {n for w in wanted if (n := normalize_place(w)) is not None}
+
         def matches(r):
-            for key in LOCATION_KEYS:
-                v = r.get(key)
-                if isinstance(v, str) and v.strip().lower().rstrip("s") in [
-                    w.rstrip("s") for w in wanted
-                ]:
-                    return True
-            return False
+            return bool(place_candidates(r) & want)
 
         for label, since in windows.items():
             inw = [r for r in rows if (p := pub(r)) and p >= since and matches(r)]

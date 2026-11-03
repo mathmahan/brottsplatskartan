@@ -29,22 +29,46 @@ EVENTS_URL = "https://brottsplatskartan.se/api/events"
 NEARBY_URL = "https://brottsplatskartan.se/api/eventsNearby"
 REQUEST_TIMEOUT = aiohttp.ClientTimeout(total=30)
 
-# The API has never published a schema and field names have drifted between
-# versions, so every field is read through a list of candidate keys instead of
-# one hard-coded spelling. The first key that yields a usable value wins.
-DEFAULT_LOCATION_KEYS: tuple[str, ...] = (
+# Field names confirmed against a live response (Stockholms län, Nov 2026).
+# The API publishes no schema, so each field is still read through a list of
+# candidate keys, with the observed name first and older/plausible spellings
+# after it as a fallback.
+#
+# One observed row, abridged:
+#   headline                    'Försök till inbrott i container på Alströmergatan, Kungsholmen'
+#   title_type                  'Stöld'
+#   title_location              'Stockholm'                   <- the kommun
+#   administrative_area_level_1 'Stockholms län'               <- the county
+#   administrative_area_level_2 None                           <- always null, do not rely on it
+#   location_string             'Kungsholmen, Alströmergatan, Fridhemsgatan, Stockholm, Stockholms län'
+#   location_string_2           'Kungsholmen, Alströmergatan, Fridhemsgatan, Stockholm'
+#   description                 'Polisen får in ett samtal om ett försök till inbrott ...'
+#   permalink                   'https://brottsplatskartan.se/stockholm/stold-stockholm-kungsholmen-512915'
+#   external_source_link        'https://polisen.se/aktuellt/handelser/...'
+#   lat / lng                   59.3357055 / 18.0314941
+#   image / image_far           static map images of the location
+#   date_human                  '49 minuter sedan'
+
+#: Fields holding a single place name. `title_location` is the municipality and
+#: was present on every observed row; `administrative_area_level_2` looks like
+#: the obvious choice but is null in practice, so it sits in the fallbacks.
+MUNICIPALITY_KEYS: tuple[str, ...] = (
+    "title_location",
     "administrative_area_level_2",
     "admin_area_level_2",
-    "administrative_area",
-    "admin_area",
     "kommun",
     "municipality",
-    "title_location",
+    "city",
+)
+#: Fields holding a comma-separated place hierarchy, most specific first. Each
+#: component is treated as a separate candidate, which is what makes filtering
+#: on a district ("Kungsholmen", "Södermalm") work as well as on a kommun.
+HIERARCHY_KEYS: tuple[str, ...] = (
+    "location_string_2",
     "location_string",
     "location",
-    "city",
-    "place",
 )
+DEFAULT_LOCATION_KEYS: tuple[str, ...] = MUNICIPALITY_KEYS + HIERARCHY_KEYS
 COUNTY_KEYS: tuple[str, ...] = (
     "administrative_area_level_1",
     "admin_area_level_1",
@@ -54,10 +78,15 @@ COUNTY_KEYS: tuple[str, ...] = (
 LAT_KEYS: tuple[str, ...] = ("lat", "latitude")
 LNG_KEYS: tuple[str, ...] = ("lng", "lon", "long", "longitude")
 URL_KEYS: tuple[str, ...] = ("permalink", "url", "link", "guid")
+SOURCE_URL_KEYS: tuple[str, ...] = ("external_source_link", "source_link")
 ID_KEYS: tuple[str, ...] = ("id", "event_id", "externalId", "external_id")
-TITLE_KEYS: tuple[str, ...] = ("title", "headline", "name")
+TITLE_KEYS: tuple[str, ...] = ("headline", "title", "name")
 TYPE_KEYS: tuple[str, ...] = ("title_type", "type", "category")
-DESC_KEYS: tuple[str, ...] = ("description", "content", "summary", "body")
+DESC_KEYS: tuple[str, ...] = ("description", "content_teaser", "summary")
+TEASER_KEYS: tuple[str, ...] = ("content_teaser", "description")
+IMAGE_KEYS: tuple[str, ...] = ("image",)
+IMAGE_WIDE_KEYS: tuple[str, ...] = ("image_far", "image")
+HUMAN_DATE_KEYS: tuple[str, ...] = ("date_human",)
 PUBDATE_KEYS: tuple[str, ...] = ("pubdate_iso8601", "pubdate", "published_at", "date")
 
 # Suffixes stripped when comparing place names, so that a configured
@@ -162,29 +191,86 @@ class Incident:
     title: str
     incident_type: str | None
     published: datetime
+    #: The municipality, from `title_location`.
     municipality: str | None
+    #: The most specific place name available, e.g. "Kungsholmen". Taken from
+    #: the first component of the location hierarchy, which is finer-grained
+    #: than the municipality and is what you actually want on a card.
+    place: str | None
+    #: The full human-readable hierarchy, e.g.
+    #: "Kungsholmen, Alströmergatan, Fridhemsgatan, Stockholm".
+    location: str | None
     county: str | None
     latitude: float | None
     longitude: float | None
     url: str | None
+    #: The police's own page for the event, when the API links one.
+    source_url: str | None
     description: str | None
+    #: Relative time as the API phrases it, e.g. "49 minuter sedan".
+    date_human: str | None
+    image: str | None = field(default=None, repr=False)
+    image_wide: str | None = field(default=None, repr=False)
+    #: Normalized place names this incident matches, used by the filter.
+    places: frozenset[str] = field(default=frozenset(), repr=False)
+    #: The same names as the API wrote them, for the diagnostic attribute.
     raw_places: tuple[str, ...] = field(default=(), repr=False)
 
-    def as_dict(self) -> dict[str, Any]:
-        """Render for use in a state attribute."""
-        return {
+    def as_dict(self, *, include_image: bool = False) -> dict[str, Any]:
+        """Render for use in a state attribute or a template.
+
+        Images are left out unless asked for: the static-map URLs are several
+        hundred characters each, and a list of them would push the sensor's
+        attributes past what the recorder will store.
+        """
+        data: dict[str, Any] = {
             "id": self.uid,
             "title": self.title,
             "type": self.incident_type,
             "published": self.published.isoformat(),
+            "date_human": self.date_human,
             "municipality": self.municipality,
+            "place": self.place,
+            "location": self.location,
             "latitude": self.latitude,
             "longitude": self.longitude,
             "url": self.url,
+            "source_url": self.source_url,
+            "description": self.description,
         }
+        if include_image:
+            data["image"] = self.image
+            data["image_wide"] = self.image_wide
+        return data
 
 
-def parse_incident(row: dict[str, Any], location_keys: tuple[str, ...]) -> Incident | None:
+def place_candidates(
+    row: dict[str, Any], location_keys: tuple[str, ...]
+) -> list[str]:
+    """Every place name a row mentions, most specific first, de-duplicated.
+
+    `location_string` is a comma-separated hierarchy, so it is split into
+    components. Without that split the whole string would be compared as one
+    name and never match anything — and because it ends in "Stockholms län" it
+    would be rejected outright as a county.
+    """
+    found: list[str] = []
+    seen: set[str] = set()
+    for key in location_keys:
+        value = row.get(key)
+        if not isinstance(value, str) or not value.strip():
+            continue
+        for part in value.split(","):
+            part = part.strip()
+            if part and part.lower() not in seen:
+                seen.add(part.lower())
+                found.append(part)
+    return found
+
+
+def parse_incident(
+    row: dict[str, Any], location_keys: tuple[str, ...]
+) -> Incident | None:
     """Normalize one API row, or return None if it is unusable."""
     published = _parse_pubdate(row)
     if published is None:
@@ -192,33 +278,47 @@ def parse_incident(row: dict[str, Any], location_keys: tuple[str, ...]) -> Incid
         return None
 
     raw_id = _first(row, ID_KEYS)
-    title = _first(row, TITLE_KEYS) or "Okänd händelse"
+    title = _str_or_none(_first(row, TITLE_KEYS)) or "Okänd händelse"
     # Fall back to a synthetic key so de-duplication still works if the API
     # ever stops sending an id.
     uid = str(raw_id) if raw_id is not None else f"{published.isoformat()}|{title}"
 
-    places: list[str] = []
-    municipality: str | None = None
-    for key in location_keys:
-        value = row.get(key)
-        if not isinstance(value, str) or not value.strip():
-            continue
-        places.append(value.strip())
-        if municipality is None and normalize_place(value) is not None:
-            municipality = value.strip()
+    raw_places = place_candidates(row, location_keys)
+    places = frozenset(
+        norm for place in raw_places if (norm := normalize_place(place)) is not None
+    )
+
+    municipality = _str_or_none(_first(row, MUNICIPALITY_KEYS))
+    if municipality is not None and normalize_place(municipality) is None:
+        # Guard against the municipality field holding a county name.
+        municipality = None
+
+    location = _str_or_none(_first(row, HIERARCHY_KEYS))
+    # The most specific name comes from the hierarchy's first component, not
+    # from `raw_places[0]` — that list starts with the municipality keys, so it
+    # would hand back "Stockholm" where "Kungsholmen" is wanted.
+    hierarchy = place_candidates(row, HIERARCHY_KEYS)
+    place = hierarchy[0] if hierarchy else municipality
 
     return Incident(
         uid=uid,
-        title=str(title),
+        title=title,
         incident_type=_str_or_none(_first(row, TYPE_KEYS)),
         published=published,
         municipality=municipality,
+        place=place,
+        location=location,
         county=_str_or_none(_first(row, COUNTY_KEYS)),
         latitude=_as_float(_first(row, LAT_KEYS)),
         longitude=_as_float(_first(row, LNG_KEYS)),
         url=_str_or_none(_first(row, URL_KEYS)),
+        source_url=_str_or_none(_first(row, SOURCE_URL_KEYS)),
         description=_str_or_none(_first(row, DESC_KEYS)),
-        raw_places=tuple(places),
+        date_human=_str_or_none(_first(row, HUMAN_DATE_KEYS)),
+        image=_str_or_none(_first(row, IMAGE_KEYS)),
+        image_wide=_str_or_none(_first(row, IMAGE_WIDE_KEYS)),
+        places=places,
+        raw_places=tuple(raw_places),
     )
 
 
@@ -311,20 +411,18 @@ async def async_fetch_incidents(
 def filter_by_municipality(
     incidents: list[Incident], municipalities: set[str]
 ) -> list[Incident]:
-    """Keep only incidents whose location matches one of `municipalities`.
+    """Keep only incidents matching one of `municipalities`.
+
+    Matching is against every component of the location hierarchy, so a
+    district ("Kungsholmen") works as well as a municipality ("Stockholm").
+    Comparison is exact after normalization, not a substring test, so
+    "Stockholmsvägen" in Nacka does not count as Stockholm.
 
     `municipalities` must already be normalized with `normalize_place`. An
     empty set means no filtering.
     """
     if not municipalities:
         return incidents
-    kept: list[Incident] = []
-    for incident in incidents:
-        candidates = {
-            norm
-            for place in incident.raw_places
-            if (norm := normalize_place(place)) is not None
-        }
-        if candidates & municipalities:
-            kept.append(incident)
-    return kept
+    return [
+        incident for incident in incidents if incident.places & municipalities
+    ]

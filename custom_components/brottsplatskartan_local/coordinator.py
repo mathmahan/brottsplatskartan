@@ -111,9 +111,14 @@ class BpkCoordinator(DataUpdateCoordinator[BpkData]):
         except BpkError as err:
             raise UpdateFailed(str(err)) from err
 
-        seen_places = sorted(
-            {place for incident in fetched for place in incident.raw_places}
+        # Frequency-ordered, not alphabetical: the location hierarchy is split
+        # into components, so this list holds street names too. Municipalities
+        # recur across incidents and therefore sort to the top, which is what
+        # you actually want to copy into `municipalities`.
+        place_counter = Counter(
+            place for incident in fetched for place in incident.raw_places
         )
+        seen_places = [place for place, _ in place_counter.most_common(50)]
         incidents = filter_by_municipality(fetched, self._municipality_filter)
 
         counts = Counter(

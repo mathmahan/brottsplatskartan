@@ -76,6 +76,9 @@ class BpkIncidentCountSensor(CoordinatorEntity[BpkCoordinator], SensorEntity):
                 incident.as_dict()
                 for incident in data.incidents[: self._max_attribute_incidents]
             ]
+            attributes["truncated"] = (
+                len(data.incidents) > self._max_attribute_incidents
+            )
         # Diagnostic: if the municipality filter matches nothing, these are the
         # place names the API actually returned, which is what to match on.
         if not data.incidents and data.fetched_total:
@@ -108,8 +111,5 @@ class BpkLatestIncidentSensor(CoordinatorEntity[BpkCoordinator], SensorEntity):
         """Return the newest incident in full."""
         if (data := self.coordinator.data) is None or not data.incidents:
             return {}
-        incident = data.incidents[0]
-        return {
-            **incident.as_dict(),
-            "description": incident.description,
-        }
+        # Only one incident here, so the static-map images are affordable.
+        return data.incidents[0].as_dict(include_image=True)

@@ -1,0 +1,257 @@
+# ---------------------------------------------------------------------------
+# Brottsplatskartan (local) — dashboard and automation examples
+#
+# Entity ids below assume `municipalities: [Stockholm]`, which names the
+# entities:
+#   sensor.brottsplatskartan_stockholm_incidents
+#   sensor.brottsplatskartan_stockholm_latest_incident
+#   event.brottsplatskartan_stockholm_new_incident
+# With a different municipality list (or none), the slug changes — check
+# Developer Tools -> States and adjust.
+# ---------------------------------------------------------------------------
+
+
+# ===========================================================================
+# 1. MAP — one marker per incident
+# ===========================================================================
+# This is the whole point of the geo_location platform. Markers appear and
+# disappear as incidents enter and leave the rolling window. Clicking one
+# opens the more-info dialog with the headline, description and links.
+#
+# `geo_location_sources` is required — without it the card shows nothing,
+# which is the single most common reason people think the platform is broken.
+
+- type: map
+  geo_location_sources:
+    - brottsplatskartan_local
+  auto_fit: true
+  theme_mode: auto
+  # Drop `hours_to_show` if you want markers to disappear the moment they
+  # leave the window rather than lingering on the map's own history.
+  hours_to_show: 24
+
+
+# ===========================================================================
+# 2. INCIDENT FEED — headline, description and both links
+# ===========================================================================
+# Reads the `incidents` attribute, which carries the full list (newest first).
+
+- type: markdown
+  title: Händelser senaste dygnet
+  content: |-
+    {% set rows = state_attr('sensor.brottsplatskartan_stockholm_incidents', 'incidents') or [] %}
+    {% if rows %}
+    {% for i in rows %}
+    **{{ i.type }}** · {{ i.date_human }} · {{ i.place or i.municipality }}
+
+    [{{ i.title }}]({{ i.url }})
+
+    {{ i.description }}
+    {%- if i.source_url %} · [Polisens rapport]({{ i.source_url }}){% endif %}
+    {% if not loop.last %}
+    ---
+    {% endif %}
+    {%- endfor %}
+    {% if state_attr('sensor.brottsplatskartan_stockholm_incidents', 'truncated') %}
+    *Listan är kapad — höj `max_attribute_incidents` för fler.*
+    {% endif %}
+    {% else %}
+    Inga händelser senaste dygnet.
+    {% endif %}
+
+
+# ===========================================================================
+# 3. COUNT + BREAKDOWN BY CRIME TYPE
+# ===========================================================================
+# `by_type` is a dict of {crime type: count}, already sorted most-common first.
+
+- type: markdown
+  title: Sammanfattning
+  content: |-
+    {% set s = 'sensor.brottsplatskartan_stockholm_incidents' %}
+    ## {{ states(s) }} händelser senaste {{ state_attr(s, 'window_hours') }} h
+    {{ state_attr(s, 'municipalities') | join(', ') or state_attr(s, 'area') }}
+
+    {% for type, n in (state_attr(s, 'by_type') or {}).items() -%}
+    - **{{ type }}** — {{ n }}
+    {% endfor %}
+    <sub>{{ state_attr(s, 'fetched_in_county') }} händelser i hela {{ state_attr(s, 'area') }} under samma period.</sub>
+
+
+# ===========================================================================
+# 4. LATEST INCIDENT, WITH THE API'S OWN STATIC MAP IMAGE
+# ===========================================================================
+# The API ships a rendered map thumbnail per incident (`image_wide`), which is
+# only exposed on the latest-incident sensor — the URLs are long, so putting
+# one on every row of the feed would blow past the recorder's attribute limit.
+
+- type: markdown
+  title: Senaste händelsen
+  content: |-
+    {% set s = 'sensor.brottsplatskartan_stockholm_latest_incident' %}
+    {% if states(s) not in ['unknown', 'unavailable'] %}
+    ### {{ state_attr(s, 'type') }} — {{ state_attr(s, 'place') }}
+
+    ![Karta]({{ state_attr(s, 'image_wide') }})
+
+    **{{ states(s) }}**
+
+    {{ state_attr(s, 'description') }}
+
+    {{ state_attr(s, 'location') }} · {{ state_attr(s, 'date_human') }}
+
+    [Brottsplatskartan]({{ state_attr(s, 'url') }}){% if state_attr(s, 'source_url') %} · [Polisen]({{ state_attr(s, 'source_url') }}){% endif %}
+    {% else %}
+    Ingen händelse i fönstret.
+    {% endif %}
+
+
+# ===========================================================================
+# 5. TREND — is this week worse than usual?
+# ===========================================================================
+# The count sensor has state_class: measurement, so long-term statistics are
+# recorded and this card works without any extra configuration.
+
+- type: statistics-graph
+  title: Brottstrend
+  entities:
+    - sensor.brottsplatskartan_stockholm_incidents
+  stat_types:
+    - mean
+    - max
+  period: hour
+  days_to_show: 30
+
+# A plain history graph is the quick version.
+- type: history-graph
+  entities:
+    - sensor.brottsplatskartan_stockholm_incidents
+  hours_to_show: 168
+
+
+# ===========================================================================
+# 6. BADGES — compact header row
+# ===========================================================================
+- type: entities
+  title: Brottsplatskartan
+  entities:
+    - entity: sensor.brottsplatskartan_stockholm_incidents
+      name: Senaste dygnet
+    - entity: sensor.brottsplatskartan_nearest_incident
+      name: Närmaste händelse
+    - entity: sensor.brottsplatskartan_stockholm_latest_incident
+      name: Senaste
+
+
+# ===========================================================================
+# 7. "SOMETHING HAPPENED NEARBY" — only shows when it is true
+# ===========================================================================
+- type: conditional
+  conditions:
+    - condition: numeric_state
+      entity: sensor.brottsplatskartan_nearest_incident
+      below: 2
+  card:
+    type: markdown
+    content: |-
+      ### ⚠️ Händelse {{ states('sensor.brottsplatskartan_nearest_incident') }} km bort
+      {{ state_attr('sensor.brottsplatskartan_nearest_incident', 'headline') }}
+
+
+# ===========================================================================
+# ===  THE REST GOES IN configuration.yaml, NOT IN THE DASHBOARD  ===========
+# ===========================================================================
+
+# --- Template sensors -------------------------------------------------------
+# Distance to the closest incident, derived from the geo_location markers
+# (whose state is already the distance from home in km).
+#
+# template:
+#   - sensor:
+#       - name: "Brottsplatskartan nearest incident"
+#         unique_id: bpk_nearest_incident
+#         unit_of_measurement: km
+#         state_class: measurement
+#         icon: mdi:map-marker-distance
+#         state: >-
+#           {% set m = states.geo_location
+#                | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+#                | rejectattr('state', 'in', ['unknown', 'unavailable'])
+#                | list %}
+#           {{ (m | map(attribute='state') | map('float') | list | min)
+#              if m else none }}
+#         attributes:
+#           headline: >-
+#             {% set m = states.geo_location
+#                  | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+#                  | rejectattr('state', 'in', ['unknown', 'unavailable'])
+#                  | list | sort(attribute='state') %}
+#             {{ m[0].attributes.headline if m else none }}
+#           url: >-
+#             {% set m = states.geo_location
+#                  | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+#                  | rejectattr('state', 'in', ['unknown', 'unavailable'])
+#                  | list | sort(attribute='state') %}
+#             {{ m[0].attributes.url if m else none }}
+#
+#       # A single crime type, for a gauge or a threshold automation.
+#       - name: "Brottsplatskartan thefts"
+#         unique_id: bpk_thefts
+#         state_class: measurement
+#         state: >-
+#           {{ (state_attr('sensor.brottsplatskartan_stockholm_incidents', 'by_type')
+#               or {}).get('Stöld', 0) }}
+
+# --- Rich notification on every new incident --------------------------------
+# Uses the bus event rather than the event entity, because several incidents
+# can arrive in one poll and the entity only holds the most recent.
+#
+# automation:
+#   - alias: "Brottsplatskartan: new incident"
+#     mode: queued
+#     max: 10
+#     triggers:
+#       - trigger: event
+#         event_type: brottsplatskartan_local_new_incident
+#     actions:
+#       - action: notify.mobile_app_your_phone
+#         data:
+#           title: "{{ trigger.event.data.type }} — {{ trigger.event.data.place }}"
+#           message: "{{ trigger.event.data.description or trigger.event.data.title }}"
+#           data:
+#             image: "{{ trigger.event.data.image_wide }}"
+#             url: "{{ trigger.event.data.url }}"
+#             actions:
+#               - action: URI
+#                 title: Brottsplatskartan
+#                 uri: "{{ trigger.event.data.url }}"
+#               - action: URI
+#                 title: Polisen
+#                 uri: "{{ trigger.event.data.source_url }}"
+
+# --- Only notify for incidents close to home --------------------------------
+#   - alias: "Brottsplatskartan: incident within 1 km"
+#     triggers:
+#       - trigger: event
+#         event_type: brottsplatskartan_local_new_incident
+#     conditions:
+#       - condition: template
+#         value_template: >-
+#           {% set lat = trigger.event.data.latitude %}
+#           {% set lng = trigger.event.data.longitude %}
+#           {{ lat is not none and lng is not none
+#              and distance(lat, lng) is not none
+#              and distance(lat, lng) < 1 }}
+#     actions:
+#       - action: notify.mobile_app_your_phone
+#         data:
+#           title: "{{ trigger.event.data.type }} {{ distance(trigger.event.data.latitude, trigger.event.data.longitude) | round(1) }} km bort"
+#           message: "{{ trigger.event.data.title }}"
+
+# --- Keep the recorder lean -------------------------------------------------
+# recorder:
+#   exclude:
+#     entity_globs:
+#       - geo_location.*
+#     entities:
+#       - sensor.brottsplatskartan_stockholm_latest_incident

@@ -20,11 +20,13 @@ from .const import (
     CONF_HOURS,
     CONF_LOCATION_KEYS,
     CONF_MAX_ATTRIBUTE_INCIDENTS,
+    CONF_MAX_MARKERS,
     CONF_MAX_PAGES,
     CONF_MUNICIPALITIES,
     DEFAULT_AREA,
     DEFAULT_HOURS,
     DEFAULT_MAX_ATTRIBUTE_INCIDENTS,
+    DEFAULT_MAX_MARKERS,
     DEFAULT_MAX_PAGES,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -64,6 +66,9 @@ CONFIG_SCHEMA = vol.Schema(
                     CONF_MAX_ATTRIBUTE_INCIDENTS,
                     default=DEFAULT_MAX_ATTRIBUTE_INCIDENTS,
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=200)),
+                vol.Optional(
+                    CONF_MAX_MARKERS, default=DEFAULT_MAX_MARKERS
+                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
                 vol.Optional(CONF_LOCATION_KEYS): vol.All(
                     cv.ensure_list, [cv.string]
                 ),
@@ -107,6 +112,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     hass.data[DOMAIN] = {
         "coordinator": coordinator,
         CONF_MAX_ATTRIBUTE_INCIDENTS: conf[CONF_MAX_ATTRIBUTE_INCIDENTS],
+        CONF_MAX_MARKERS: conf[CONF_MAX_MARKERS],
     }
 
     for platform in PLATFORMS:

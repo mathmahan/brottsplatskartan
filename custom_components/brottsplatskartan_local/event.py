@@ -75,7 +75,11 @@ class BpkNewIncidentEvent(EventEntity):
         self._seen = current
 
         for incident in fresh:
-            payload = incident.as_dict()
+            # Images are included here but not in the sensor's incident list:
+            # one event carries one incident, so the long static-map URLs are
+            # affordable, and they make a notification with a map thumbnail
+            # possible.
+            payload = incident.as_dict(include_image=True)
             self._trigger_event(EVENT_TYPE_NEW_INCIDENT, payload)
             # Also put it on the event bus, which is easier to consume from an
             # automation that wants every incident rather than just the last.

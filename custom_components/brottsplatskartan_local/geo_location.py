@@ -13,7 +13,7 @@ from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.util.location import distance as distance_in_metres
 
 from .api import Incident
-from .const import ATTRIBUTION, DOMAIN, LOGGER
+from .const import ATTRIBUTION, CONF_MAX_MARKERS, DOMAIN, LOGGER
 from .coordinator import BpkCoordinator
 
 
@@ -26,8 +26,10 @@ async def async_setup_platform(
     """Set up the geolocation markers."""
     if discovery_info is None:
         return
-    coordinator: BpkCoordinator = hass.data[DOMAIN]["coordinator"]
-    BpkGeoLocationManager(hass, coordinator, async_add_entities).async_setup()
+    data = hass.data[DOMAIN]
+    BpkGeoLocationManager(
+        hass, data["coordinator"], async_add_entities, data[CONF_MAX_MARKERS]
+    ).async_setup()
 
 
 class BpkGeoLocationManager:
@@ -38,11 +40,13 @@ class BpkGeoLocationManager:
         hass: HomeAssistant,
         coordinator: BpkCoordinator,
         async_add_entities: AddEntitiesCallback,
+        max_markers: int,
     ) -> None:
         """Initialize the manager."""
         self._hass = hass
         self._coordinator = coordinator
         self._async_add_entities = async_add_entities
+        self._max_markers = max_markers
         self._entities: dict[str, BpkGeoLocationEvent] = {}
         self._unsub: Callable[[], None] | None = None
 
@@ -60,11 +64,22 @@ class BpkGeoLocationManager:
         if data is not None:
             # Not every incident carries coordinates; those simply get no
             # marker rather than being placed at 0,0.
-            incidents = {
-                incident.uid: incident
+            # Capped: a wide window over a whole county can return hundreds of
+            # incidents, and one entity each would flood the state machine.
+            # data.incidents is newest-first, so the cap keeps the newest.
+            located = [
+                incident
                 for incident in data.incidents
                 if incident.latitude is not None and incident.longitude is not None
-            }
+            ]
+            if self._max_markers and len(located) > self._max_markers:
+                LOGGER.debug(
+                    "Capping %s located incidents to %s markers",
+                    len(located),
+                    self._max_markers,
+                )
+                located = located[: self._max_markers]
+            incidents = {incident.uid: incident for incident in located}
 
         for uid in set(self._entities) - set(incidents):
             entity = self._entities.pop(uid)
@@ -98,16 +113,29 @@ class BpkGeoLocationEvent(GeolocationEvent):
     _attr_source = DOMAIN
     _attr_unit_of_measurement = UnitOfLength.KILOMETERS
 
+    # Deliberately no unique_id. These entities are transient — one per
+    # incident, replaced as the window moves — and a unique_id would leave a
+    # permanent entity-registry entry behind for every incident ever seen,
+    # which is thousands of orphans over a few months. The built-in feed
+    # integrations (usgs_earthquakes_feed, gdacs) omit it for the same reason.
+
     def __init__(self, hass: HomeAssistant, incident: Incident) -> None:
         """Initialize the marker."""
         self._incident = incident
-        self._attr_unique_id = f"{DOMAIN}_{incident.uid}"
         self._apply(hass, incident)
 
     def _apply(self, hass: HomeAssistant, incident: Incident) -> None:
         """Copy the incident into the entity's geolocation fields."""
         self._incident = incident
-        self._attr_name = incident.title
+        # Short label: the marker name is what shows on the map, and the full
+        # headline is far too long for it. The headline lives in the
+        # attributes, which is what the more-info dialog shows on click.
+        place = incident.place or incident.municipality
+        self._attr_name = (
+            f"{incident.incident_type}: {place}"
+            if incident.incident_type and place
+            else incident.title
+        )
         self._attr_latitude = incident.latitude
         self._attr_longitude = incident.longitude
 
@@ -127,16 +155,23 @@ class BpkGeoLocationEvent(GeolocationEvent):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return the incident detail."""
+        """Return the incident detail shown in the more-info dialog."""
+        incident = self._incident
         return {
             key: value
             for key, value in (
-                ("incident_id", self._incident.uid),
-                ("type", self._incident.incident_type),
-                ("published", self._incident.published.isoformat()),
-                ("municipality", self._incident.municipality),
-                ("url", self._incident.url),
-                ("description", self._incident.description),
+                ("incident_id", incident.uid),
+                ("headline", incident.title),
+                ("type", incident.incident_type),
+                ("description", incident.description),
+                ("published", incident.published.isoformat()),
+                ("date_human", incident.date_human),
+                ("place", incident.place),
+                ("municipality", incident.municipality),
+                ("location", incident.location),
+                ("url", incident.url),
+                ("source_url", incident.source_url),
+                ("image", incident.image_wide),
             )
             if value is not None
         }

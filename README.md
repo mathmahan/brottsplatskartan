@@ -43,29 +43,57 @@ brottsplatskartan_local:
 | Option | Default | Notes |
 |---|---|---|
 | `area` | `Stockholms län` | Must be one of the 21 counties the API accepts. |
-| `municipalities` | `[]` | Filters the county down. Empty = whole county. Matching ignores case and the `kommun`/`stad` suffixes, so `Stockholm`, `Stockholms kommun` and `Stockholms stad` are the same thing. |
+| `municipalities` | `[]` | Filters the county down. Empty = whole county. Matches a **municipality or a district** — `Stockholm`, but also `Kungsholmen`, `Södermalm`, `Norrmalm`. Case- and suffix-insensitive, so `Stockholm` ≡ `Stockholms kommun` ≡ `Stockholms stad`. Comparison is exact, so `Stockholmsvägen` in Nacka does *not* count as Stockholm. |
 | `hours` | `24` | Rolling window, 1–168. |
 | `scan_interval` | `00:15:00` | Minimum 5 minutes — the API rate-limits per app id. |
 | `max_pages` | `6` | Pagination safety stop. Raise it if a wide window looks truncated. |
 | `max_attribute_incidents` | `25` | How many incidents to put in the sensor attributes. `0` omits the list. |
+| `max_markers` | `100` | Cap on map markers. A wide window over a whole county can return hundreds of incidents; the newest are kept. `0` = no cap. |
 | `location_keys` | *(auto)* | Override which API fields are treated as the municipality. Only needed if the API renames them — see `probe_api.py`. |
 | `app_id` | `ha-<machine id>` | Rate-limit identity. Keep it stable. |
 
 ## Entities
 
 - **`sensor.brottsplatskartan_stockholm_incidents`** — count in the window.
-  Attributes: `by_type` (per-crime-type counts), `incidents` (the full list),
-  `window_hours`, `area`, `municipalities`, `fetched_in_county`.
+  Attributes: `by_type` (per-crime-type counts), `incidents` (the full list —
+  each with `title`, `type`, `place`, `location`, `description`, `url`,
+  `source_url`, `date_human`, coordinates), `window_hours`, `area`,
+  `municipalities`, `fetched_in_county`, `truncated`.
 - **`sensor.brottsplatskartan_stockholm_latest_incident`** — newest headline,
-  with `description` and `url` in attributes.
-- **`geo_location.*`** — one map marker per incident that has coordinates, with
-  `distance` from home in km. Add the Map card with `geo_location_sources: [brottsplatskartan_local]`.
+  with the same fields plus `image` / `image_wide`: the API's own rendered map
+  thumbnail of the location. Images are only on this entity — the URLs run to
+  several hundred characters, so a list of 25 would overflow what the recorder
+  stores.
+- **`geo_location.*`** — one marker per incident that has coordinates, named
+  `<type>: <place>` (e.g. `Stöld: Kungsholmen`), with `distance` from home in
+  km as its state and the headline, description, both links and the map image
+  in its attributes. **You must add `geo_location_sources` to the Map card or
+  nothing appears** — see `dashboard.yaml`. These entities are deliberately
+  given no `unique_id`, so they do not accumulate in the entity registry.
 - **`event.brottsplatskartan_stockholm_new_incident`** — fires `new_incident`
   each time an unseen incident appears. A restart does not replay the window.
 
 Every new incident is also put on the event bus as `brottsplatskartan_local_new_incident`,
 which is easier to consume when several arrive in the same poll (the event
 entity only holds the most recent).
+
+## Dashboard
+
+`dashboard.yaml` holds ready-made cards — paste the one you want into a
+dashboard in YAML mode (or the raw config editor):
+
+1. **Map** with a marker per incident. Requires `geo_location_sources`.
+2. **Incident feed** — type, relative time, place, description, and links to
+   both Brottsplatskartan and the police's own report.
+3. **Summary** — count plus a per-crime-type breakdown.
+4. **Latest incident** rendered with the API's static map image.
+5. **Trend** — a statistics graph over 30 days (the count sensor sets
+   `state_class: measurement`, so long-term statistics work out of the box).
+6. **"Nearest incident"** template sensor, derived from the markers' distances,
+   plus a conditional card that only appears when something happens close by.
+
+The same file has automations for a rich mobile notification with the map
+image and action buttons, and one that only fires for incidents within 1 km.
 
 ## Automation example
 
@@ -97,6 +125,25 @@ recorder:
       - sensor.brottsplatskartan_stockholm_latest_incident
 ```
 
+## API fields
+
+Confirmed against a live response (Stockholms län, November 2026):
+
+| Field | Used as | Note |
+|---|---|---|
+| `headline` | title | `title` does not exist |
+| `title_type` | crime type | e.g. `Stöld`, `Rån` |
+| `title_location` | municipality | present on 60/60 rows |
+| `administrative_area_level_2` | — | **always `null`** — the obvious choice, and useless |
+| `administrative_area_level_1` | county | same for every row, so never matched as a municipality |
+| `location_string` | districts, streets | comma-separated hierarchy, split into components |
+| `description` | description | plain text; `content*` are HTML |
+| `permalink` | link | Brottsplatskartan page |
+| `external_source_link` | source link | polisen.se |
+| `lat` / `lng` | coordinates | floats |
+| `image` / `image_far` | map thumbnails | pre-rendered static maps |
+| `date_human` | relative time | e.g. `49 minuter sedan` |
+
 ## If the count is 0 but the county has incidents
 
 The municipality filter found nothing to match. The count sensor then exposes a
@@ -121,11 +168,19 @@ pip install aiohttp
 python3 tests/test_api.py
 ```
 
-26 checks covering the rolling window, pagination, both upstream bugs,
-de-duplication, rate limiting, field parsing and municipality normalization.
-They run against a fake API server with stubbed Home Assistant modules
-(`tests/stubs/`), so no Home Assistant install is required and no real network
-request is made.
+```bash
+python3 tests/test_real_schema.py
+```
+
+`test_api.py` covers the rolling window, pagination, both upstream bugs,
+de-duplication and rate limiting against a fake API server.
+`test_real_schema.py` parses rows captured verbatim from the live API and locks
+in the confirmed field names, including the cases that matter for filtering: a
+street called `Stockholmsvägen` in Nacka must not count as Stockholm, and a row
+whose only location is `Stockholms län` must not match any municipality.
+
+Both run with stubbed Home Assistant modules (`tests/stubs/`), so no Home
+Assistant install is required and no real network request is made.
 
 ## Layout
 
@@ -136,6 +191,8 @@ custom_components/brottsplatskartan_local/
   sensor.py        count sensor + latest-incident sensor
   geo_location.py  one map marker per incident, added/removed as they come and go
   event.py         fires on each newly seen incident
-tools/probe_api.py what the API actually returns, for debugging counts
-tests/test_api.py  the suite above
+tools/probe_api.py     what the API actually returns, for debugging counts
+tests/test_api.py      fetch, paging and window logic
+tests/test_real_schema.py  parsing and filtering against real captured rows
+dashboard.yaml         Lovelace cards and automations
 ```
