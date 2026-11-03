@@ -145,7 +145,7 @@ def main():
           const.CONF_AREA in created["options"], False)
 
     # --- entry identity is order-independent ---
-    uid = cf._entry_unique_id
+    uid = cf.entry_unique_id
     check("same places in a different order give the same id",
           uid("Stockholms län", ["Solna", "Stockholm"]),
           uid("Stockholms län", ["Stockholm", "Solna"]))

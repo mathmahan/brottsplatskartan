@@ -259,7 +259,17 @@ number comes from.
 ## Tests
 
 ```bash
-pip install aiohttp
+pip install aiohttp voluptuous pyyaml
+python3 tests/run_all.py
+```
+
+`run_all.py` runs every suite and exits non-zero if any fails. Run it that way
+rather than looping over the files in a shell, which reports only the last
+suite's status and hides a failure in the middle.
+
+Individually:
+
+```bash
 python3 tests/test_api.py
 ```
 
@@ -321,4 +331,5 @@ examples/automations.yaml      two automations, as a list for automations.yaml
 examples/ui-editor/            the same two, one object each, for the UI editor
 tests/test_examples.py         structural checks on the files above
 tests/test_entry_overlap.py    entry identity and overlapping-scope warnings
+tests/run_all.py               runs every suite, fails the run if any fails
 ```
