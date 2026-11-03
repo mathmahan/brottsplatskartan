@@ -139,6 +139,23 @@ def normalize_place(value: Any) -> str | None:
     return text or None
 
 
+def normalized_places(names: list[str]) -> set[str]:
+    """Normalize a configured place list for comparison."""
+    return {norm for name in names if (norm := normalize_place(name)) is not None}
+
+
+def entry_unique_id(area: str, municipalities: list[str]) -> str:
+    """Stable identity for a config entry: its county plus the places it filters.
+
+    Normalized and sorted, so ["Solna", "Stockholm"] and ["Stockholm", "Solna"]
+    are one entry. Home Assistant's `_async_abort_entries_match` compares the
+    stored list by equality, so without this a reordered list slips past the
+    duplicate check and a second entry is created over the same incidents —
+    which shows up as incidents appearing twice on the map.
+    """
+    return f"{area.strip().lower()}|{','.join(sorted(normalized_places(municipalities)))}"
+
+
 def _first(row: dict[str, Any], keys: tuple[str, ...]) -> Any:
     """Return the first present, non-empty value among `keys`."""
     for key in keys:

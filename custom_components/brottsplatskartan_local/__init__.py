@@ -17,7 +17,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
-from .api import DEFAULT_LOCATION_KEYS
+from .api import DEFAULT_LOCATION_KEYS, entry_unique_id, normalized_places
 from .const import (
     AREAS,
     CONF_APP_ID,
@@ -132,18 +132,54 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     return True
 
 
+def _warn_about_overlapping_entries(
+    hass: HomeAssistant, entry: ConfigEntry, area: str, municipalities: list[str]
+) -> None:
+    """Log a warning when another entry covers some of the same incidents.
+
+    Two entries over overlapping areas are a legitimate configuration — a
+    municipality and its whole county, say — but each produces its own map
+    marker per incident, so the shared incidents appear twice. That looks like
+    a bug in the integration, and from the map alone there is no way to tell,
+    so say it plainly in the log instead.
+    """
+    places = normalized_places(municipalities)
+    overlapping: list[str] = []
+    for other in hass.config_entries.async_entries(DOMAIN):
+        if other.entry_id == entry.entry_id or other.data.get(CONF_AREA) != area:
+            continue
+        other_places = normalized_places(
+            list(other.options.get(CONF_MUNICIPALITIES) or [])
+        )
+        # An empty set means the whole county, which overlaps everything in it.
+        if not places or not other_places or (places & other_places):
+            overlapping.append(other.title)
+
+    if overlapping:
+        LOGGER.warning(
+            "'%s' covers some of the same incidents as %s. Each entry adds its "
+            "own map marker per incident, so incidents in both will appear "
+            "more than once on the map. Remove one of them under Settings > "
+            "Devices & services if that is not what you want",
+            entry.title,
+            " and ".join(f"'{title}'" for title in overlapping),
+        )
+
+
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up a config entry."""
     options = entry.options
     location_keys = tuple(options.get(CONF_LOCATION_KEYS) or DEFAULT_LOCATION_KEYS)
+    municipalities = list(options.get(CONF_MUNICIPALITIES) or [])
+    area: str = entry.data[CONF_AREA]
 
     coordinator = BpkCoordinator(
         hass,
         # Stable across restarts, unique to this installation: the API uses it
         # to attribute rate limits.
         app_id=entry.data.get(CONF_APP_ID) or f"ha-{uuid.getnode():x}",
-        area=entry.data[CONF_AREA],
-        municipalities=list(options.get(CONF_MUNICIPALITIES) or []),
+        area=area,
+        municipalities=municipalities,
         hours=int(options.get(CONF_HOURS, DEFAULT_HOURS)),
         max_pages=int(options.get(CONF_MAX_PAGES, DEFAULT_MAX_PAGES)),
         location_keys=location_keys,
@@ -152,6 +188,27 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         ),
         entry=entry,
     )
+
+    # Entries created before unique ids were introduced have none, which leaves
+    # them outside the duplicate check. Backfill it, unless another entry has
+    # already claimed that identity.
+    if entry.unique_id is None:
+        unique_id = entry_unique_id(area, municipalities)
+        if any(
+            other.unique_id == unique_id
+            for other in hass.config_entries.async_entries(DOMAIN)
+            if other.entry_id != entry.entry_id
+        ):
+            LOGGER.warning(
+                "'%s' duplicates another entry exactly; remove one under "
+                "Settings > Devices & services",
+                entry.title,
+            )
+        else:
+            hass.config_entries.async_update_entry(entry, unique_id=unique_id)
+
+    _warn_about_overlapping_entries(hass, entry, area, municipalities)
+
     await coordinator.async_config_entry_first_refresh()
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {

@@ -21,7 +21,7 @@ from .api import (
     BpkError,
     BpkRateLimited,
     async_discover_municipalities,
-    normalize_place,
+    entry_unique_id,
 )
 from .const import (
     AREAS,
@@ -126,21 +126,6 @@ def _coerce_ints(options: dict[str, Any]) -> dict[str, Any]:
     return options
 
 
-def _entry_unique_id(area: str, municipalities: list[str]) -> str:
-    """Stable identity for an entry: its county plus the places it filters to.
-
-    Normalized and sorted, so ["Solna", "Stockholm"] and
-    ["Stockholm", "Solna"] are the same entry. `_async_abort_entries_match`
-    compares the stored list by equality, which means a reordered list slips
-    past it and a second entry gets created — two entries over the same
-    incidents, which shows up as every incident appearing twice on the map.
-    """
-    places = sorted(
-        {norm for name in municipalities if (norm := normalize_place(name)) is not None}
-    )
-    return f"{area.strip().lower()}|{','.join(places)}"
-
-
 def _title(area: str, municipalities: list[str]) -> str:
     """Entry title, which also becomes the device name and entity prefix."""
     if municipalities:
@@ -218,7 +203,7 @@ class BpkConfigFlow(ConfigFlow, domain=DOMAIN):
             # Allow several entries for one county with different place sets,
             # but not two covering the same places.
             await self.async_set_unique_id(
-                _entry_unique_id(self._area, municipalities)
+                entry_unique_id(self._area, municipalities)
             )
             self._abort_if_unique_id_configured()
             return self.async_create_entry(
@@ -255,7 +240,7 @@ class BpkConfigFlow(ConfigFlow, domain=DOMAIN):
         """Create an entry from a legacy `configuration.yaml` block."""
         area = import_data.get(CONF_AREA, DEFAULT_AREA)
         municipalities = list(import_data.get(CONF_MUNICIPALITIES) or [])
-        await self.async_set_unique_id(_entry_unique_id(area, municipalities))
+        await self.async_set_unique_id(entry_unique_id(area, municipalities))
         self._abort_if_unique_id_configured()
 
         options = {
@@ -314,7 +299,7 @@ class BpkOptionsFlow(OptionsFlow):
             self.hass.config_entries.async_update_entry(
                 entry,
                 title=_title(area, municipalities),
-                unique_id=_entry_unique_id(area, municipalities),
+                unique_id=entry_unique_id(area, municipalities),
             )
             return self.async_create_entry(data=options)
 

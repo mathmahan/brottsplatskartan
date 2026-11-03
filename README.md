@@ -203,11 +203,21 @@ two entries — say one for `Stockholm` from an imported YAML block and one for
 the whole county added in the UI — every Stockholm incident gets a marker from
 each. Delete whichever you do not want.
 
-This was easier to end up with than it should have been: entries are now
-identified by county plus their normalized, sorted place list, so a second
-entry over the same places is refused. Previously the check compared the place
-list by equality, so `[Solna, Stockholm]` and `[Stockholm, Solna]` were treated
-as different.
+The integration now says so in the log on startup when it spots this:
+
+```
+'Brottsplatskartan Stockholm' covers some of the same incidents as
+'Brottsplatskartan Stockholms län'. Each entry adds its own map marker per
+incident, so incidents in both will appear more than once on the map.
+```
+
+Two entries over overlapping areas are a legitimate configuration, so this is
+a warning rather than an error. What is *not* legitimate is two entries over
+the *same* places, and that was previously easy to create: the duplicate check
+compared the place list by equality, so `[Solna, Stockholm]` did not match an
+existing `[Stockholm, Solna]`. Entries are now identified by county plus their
+normalized, sorted place list, and existing entries have that identity
+backfilled on upgrade.
 
 To count what you actually have, in **Developer Tools → Template**:
 
@@ -220,8 +230,14 @@ To count what you actually have, in **Developer Tools → Template**:
    | map(attribute='attributes.incident_id') | unique | list | count }} distinct incidents
 ```
 
-If those two numbers differ, it is cause 2 — duplicate entries. If they match
-but the map still looks doubled, it is cause 1 — the card.
+If those two numbers differ, it is cause 2 — more markers exist than there are
+incidents, so more than one entry is producing them. If they match but the map
+still looks doubled, it is cause 1: the entity count is right and the card is
+drawing each one twice.
+
+Note that the difference need not be a clean doubling. A county entry (10
+incidents) beside a Stockholm entry (4 of those 10) gives 14 markers for 10
+incidents — only the shared 4 are duplicated.
 
 ## If the count is 0 but the county has incidents
 
@@ -304,4 +320,5 @@ examples/configuration.yaml    template sensors + recorder excludes
 examples/automations.yaml      two automations, as a list for automations.yaml
 examples/ui-editor/            the same two, one object each, for the UI editor
 tests/test_examples.py         structural checks on the files above
+tests/test_entry_overlap.py    entry identity and overlapping-scope warnings
 ```
