@@ -8,32 +8,45 @@ from homeassistant.components.sensor import (
     SensorEntity,
     SensorStateClass,
 )
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import ATTRIBUTION, CONF_MAX_ATTRIBUTE_INCIDENTS, DOMAIN
 from .coordinator import BpkCoordinator
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the sensor from the YAML-configured integration."""
-    if discovery_info is None:
-        return
-    data = hass.data[DOMAIN]
+    """Set up the sensors for a config entry."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    coordinator: BpkCoordinator = data["coordinator"]
     async_add_entities(
         [
             BpkIncidentCountSensor(
-                data["coordinator"], data[CONF_MAX_ATTRIBUTE_INCIDENTS]
+                coordinator, entry, data[CONF_MAX_ATTRIBUTE_INCIDENTS]
             ),
-            BpkLatestIncidentSensor(data["coordinator"]),
+            BpkLatestIncidentSensor(coordinator, entry),
         ]
+    )
+
+
+def device_info(entry: ConfigEntry) -> DeviceInfo:
+    """Group the entry's entities under one service device.
+
+    With a config entry this works, so the entities can use
+    `has_entity_name` and inherit the device name as their prefix.
+    """
+    return DeviceInfo(
+        entry_type=DeviceEntryType.SERVICE,
+        identifiers={(DOMAIN, entry.entry_id)},
+        manufacturer="Brottsplatskartan",
+        name=entry.title,
     )
 
 
@@ -41,16 +54,23 @@ class BpkIncidentCountSensor(CoordinatorEntity[BpkCoordinator], SensorEntity):
     """Number of incidents in the rolling window."""
 
     _attr_attribution = ATTRIBUTION
+    _attr_has_entity_name = True
+    _attr_name = "Incidents"
     _attr_icon = "mdi:police-badge"
     _attr_native_unit_of_measurement = "incidents"
     _attr_state_class = SensorStateClass.MEASUREMENT
 
-    def __init__(self, coordinator: BpkCoordinator, max_attribute_incidents: int) -> None:
+    def __init__(
+        self,
+        coordinator: BpkCoordinator,
+        entry: ConfigEntry,
+        max_attribute_incidents: int,
+    ) -> None:
         """Initialize the count sensor."""
         super().__init__(coordinator)
         self._max_attribute_incidents = max_attribute_incidents
-        self._attr_name = f"Brottsplatskartan {coordinator.label} incidents"
-        self._attr_unique_id = f"{coordinator.app_id}_incident_count"
+        self._attr_unique_id = f"{entry.entry_id}_incident_count"
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> int | None:
@@ -90,13 +110,15 @@ class BpkLatestIncidentSensor(CoordinatorEntity[BpkCoordinator], SensorEntity):
     """The most recent incident, as a human-readable headline."""
 
     _attr_attribution = ATTRIBUTION
+    _attr_has_entity_name = True
+    _attr_name = "Latest incident"
     _attr_icon = "mdi:alert-circle-outline"
 
-    def __init__(self, coordinator: BpkCoordinator) -> None:
+    def __init__(self, coordinator: BpkCoordinator, entry: ConfigEntry) -> None:
         """Initialize the latest-incident sensor."""
         super().__init__(coordinator)
-        self._attr_name = f"Brottsplatskartan {coordinator.label} latest incident"
-        self._attr_unique_id = f"{coordinator.app_id}_latest_incident"
+        self._attr_unique_id = f"{entry.entry_id}_latest_incident"
+        self._attr_device_info = device_info(entry)
 
     @property
     def native_value(self) -> str | None:

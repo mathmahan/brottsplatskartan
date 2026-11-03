@@ -1,0 +1,67 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Brottsplatskartan",
+        "description": "Choose the county to fetch incidents for. The next step lets you narrow it down to a municipality or a district.",
+        "data": {
+          "area": "County"
+        },
+        "data_description": {
+          "area": "The API only accepts whole counties. Filtering to a municipality happens in the next step."
+        }
+      },
+      "places": {
+        "title": "Narrow it down",
+        "description": "Municipalities reporting incidents in {area} right now: {found}.\n\nLeave the field empty to count the whole county. You can also type a district or neighbourhood by hand, for example Kungsholmen or Södermalm — anything the API names as part of a location will match.",
+        "data": {
+          "municipalities": "Municipalities or districts",
+          "hours": "Time window",
+          "update_interval": "Update interval",
+          "max_attribute_incidents": "Incidents listed in attributes",
+          "max_markers": "Maximum map markers",
+          "max_pages": "Maximum API pages per update"
+        },
+        "data_description": {
+          "municipalities": "Matching ignores case and the kommun/stad suffixes. Comparison is exact, so a street called Stockholmsvägen in Nacka does not count as Stockholm.",
+          "hours": "A rolling window, so the count does not reset at midnight.",
+          "update_interval": "The API rate-limits per installation; five minutes is the lowest allowed.",
+          "max_attribute_incidents": "How many incidents to put in the sensor's attributes for dashboard cards. 0 omits the list.",
+          "max_markers": "A wide window over a whole county can return hundreds of incidents. The newest are kept. 0 means no cap.",
+          "max_pages": "Safety stop for pagination. Raise it if a long time window looks truncated."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "That county and municipality combination is already set up."
+    },
+    "error": {
+      "cannot_connect": "Could not reach brottsplatskartan.se.",
+      "rate_limited": "brottsplatskartan.se is rate limiting this installation. Try again later."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Brottsplatskartan options",
+        "description": "Watching {area}. Changes apply immediately — no restart needed.",
+        "data": {
+          "municipalities": "Municipalities or districts",
+          "hours": "Time window",
+          "update_interval": "Update interval",
+          "max_attribute_incidents": "Incidents listed in attributes",
+          "max_markers": "Maximum map markers",
+          "max_pages": "Maximum API pages per update"
+        },
+        "data_description": {
+          "municipalities": "Leave empty for the whole county. Districts can be typed by hand.",
+          "hours": "A rolling window, so the count does not reset at midnight.",
+          "update_interval": "Minimum five minutes, to stay inside the API's rate limit.",
+          "max_attribute_incidents": "0 omits the incident list from the sensor's attributes.",
+          "max_markers": "0 means no cap.",
+          "max_pages": "Raise it if a long time window looks truncated."
+        }
+      }
+    }
+  }
+}

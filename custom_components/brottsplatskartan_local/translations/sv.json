@@ -1,0 +1,67 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Brottsplatskartan",
+        "description": "Välj vilket län händelser ska hämtas för. I nästa steg kan du avgränsa till en kommun eller en stadsdel.",
+        "data": {
+          "area": "Län"
+        },
+        "data_description": {
+          "area": "API:et tar bara emot hela län. Avgränsningen till kommun görs i nästa steg."
+        }
+      },
+      "places": {
+        "title": "Avgränsa",
+        "description": "Kommuner med händelser i {area} just nu: {found}.\n\nLämna fältet tomt för att räkna hela länet. Du kan också skriva in en stadsdel själv, till exempel Kungsholmen eller Södermalm — allt som API:et anger som del av en plats fungerar.",
+        "data": {
+          "municipalities": "Kommuner eller stadsdelar",
+          "hours": "Tidsfönster",
+          "update_interval": "Uppdateringsintervall",
+          "max_attribute_incidents": "Antal händelser i attribut",
+          "max_markers": "Högsta antal kartnålar",
+          "max_pages": "Högsta antal API-sidor per uppdatering"
+        },
+        "data_description": {
+          "municipalities": "Matchningen struntar i versaler och ändelserna kommun/stad. Jämförelsen är exakt, så en Stockholmsvägen i Nacka räknas inte som Stockholm.",
+          "hours": "Ett rullande fönster, så räknaren nollställs inte vid midnatt.",
+          "update_interval": "API:et begränsar antalet anrop per installation. Fem minuter är lägsta tillåtna.",
+          "max_attribute_incidents": "Hur många händelser som läggs i sensorns attribut för kort på instrumentpanelen. 0 utelämnar listan.",
+          "max_markers": "Ett brett fönster över ett helt län kan ge hundratals händelser. De senaste behålls. 0 betyder ingen gräns.",
+          "max_pages": "Säkerhetsspärr för sidindelningen. Höj den om ett långt tidsfönster ser avkapat ut."
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Den kombinationen av län och kommun finns redan."
+    },
+    "error": {
+      "cannot_connect": "Kunde inte nå brottsplatskartan.se.",
+      "rate_limited": "brottsplatskartan.se begränsar antalet anrop från den här installationen. Försök igen senare."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Inställningar för Brottsplatskartan",
+        "description": "Bevakar {area}. Ändringar börjar gälla direkt — ingen omstart behövs.",
+        "data": {
+          "municipalities": "Kommuner eller stadsdelar",
+          "hours": "Tidsfönster",
+          "update_interval": "Uppdateringsintervall",
+          "max_attribute_incidents": "Antal händelser i attribut",
+          "max_markers": "Högsta antal kartnålar",
+          "max_pages": "Högsta antal API-sidor per uppdatering"
+        },
+        "data_description": {
+          "municipalities": "Lämna tomt för hela länet. Stadsdelar kan skrivas in manuellt.",
+          "hours": "Ett rullande fönster, så räknaren nollställs inte vid midnatt.",
+          "update_interval": "Minst fem minuter, för att hålla sig inom API:ets gräns.",
+          "max_attribute_incidents": "0 utelämnar händelselistan från sensorns attribut.",
+          "max_markers": "0 betyder ingen gräns.",
+          "max_pages": "Höj den om ett långt tidsfönster ser avkapat ut."
+        }
+      }
+    }
+  }
+}

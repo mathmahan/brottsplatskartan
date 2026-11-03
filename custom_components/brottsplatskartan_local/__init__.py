@@ -1,4 +1,8 @@
-"""The local Brottsplatskartan integration, configured from YAML."""
+"""The local Brottsplatskartan integration.
+
+Set up from the UI. A legacy `configuration.yaml` block is imported into a
+config entry on first run and can then be deleted.
+"""
 
 from __future__ import annotations
 
@@ -7,9 +11,10 @@ from datetime import timedelta
 
 import voluptuous as vol
 
+from homeassistant.config_entries import SOURCE_IMPORT, ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL, Platform
 from homeassistant.core import HomeAssistant
-from homeassistant.helpers import config_validation as cv, discovery
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
 
 from .api import DEFAULT_LOCATION_KEYS
@@ -23,15 +28,18 @@ from .const import (
     CONF_MAX_MARKERS,
     CONF_MAX_PAGES,
     CONF_MUNICIPALITIES,
+    CONF_UPDATE_INTERVAL,
     DEFAULT_AREA,
     DEFAULT_HOURS,
     DEFAULT_MAX_ATTRIBUTE_INCIDENTS,
     DEFAULT_MAX_MARKERS,
     DEFAULT_MAX_PAGES,
     DEFAULT_SCAN_INTERVAL,
+    DEFAULT_UPDATE_INTERVAL,
     DOMAIN,
     LOGGER,
     MIN_SCAN_INTERVAL,
+    MIN_UPDATE_INTERVAL,
 )
 from .coordinator import BpkCoordinator
 
@@ -48,6 +56,8 @@ def _at_least_min_interval(value: timedelta) -> timedelta:
     return value
 
 
+# Retained only so an existing YAML block can be imported. New installations
+# configure the integration from the UI.
 CONFIG_SCHEMA = vol.Schema(
     {
         DOMAIN: vol.Schema(
@@ -69,9 +79,7 @@ CONFIG_SCHEMA = vol.Schema(
                 vol.Optional(
                     CONF_MAX_MARKERS, default=DEFAULT_MAX_MARKERS
                 ): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
-                vol.Optional(CONF_LOCATION_KEYS): vol.All(
-                    cv.ensure_list, [cv.string]
-                ),
+                vol.Optional(CONF_LOCATION_KEYS): vol.All(cv.ensure_list, [cv.string]),
                 vol.Optional(CONF_APP_ID): cv.string,
                 vol.Optional(
                     CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
@@ -84,48 +92,74 @@ CONFIG_SCHEMA = vol.Schema(
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
-    """Set up the integration from configuration.yaml."""
-    conf = config.get(DOMAIN)
-    if conf is None:
+    """Import a legacy YAML block, if there is one."""
+    if (conf := config.get(DOMAIN)) is None:
         return True
 
-    location_keys = tuple(conf.get(CONF_LOCATION_KEYS) or DEFAULT_LOCATION_KEYS)
+    import_data = dict(conf)
+    # The YAML schema takes a timedelta; options are JSON, so store minutes.
+    interval: timedelta = import_data.pop(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+    import_data[CONF_UPDATE_INTERVAL] = max(
+        MIN_UPDATE_INTERVAL, int(interval.total_seconds() // 60)
+    )
+
+    LOGGER.warning(
+        "Configuring %s in configuration.yaml is deprecated. Your settings are "
+        "being imported into a config entry — once Settings > Devices & services "
+        "shows the integration, delete the '%s:' block from configuration.yaml",
+        DOMAIN,
+        DOMAIN,
+    )
+    hass.async_create_task(
+        hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": SOURCE_IMPORT}, data=import_data
+        )
+    )
+    return True
+
+
+async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Set up a config entry."""
+    options = entry.options
+    location_keys = tuple(options.get(CONF_LOCATION_KEYS) or DEFAULT_LOCATION_KEYS)
 
     coordinator = BpkCoordinator(
         hass,
-        # The API uses this to attribute rate limits, so it should be stable
-        # across restarts but unique to this installation.
-        app_id=conf.get(CONF_APP_ID) or f"ha-{uuid.getnode():x}",
-        area=conf[CONF_AREA],
-        municipalities=conf[CONF_MUNICIPALITIES],
-        hours=conf[CONF_HOURS],
-        max_pages=conf[CONF_MAX_PAGES],
+        # Stable across restarts, unique to this installation: the API uses it
+        # to attribute rate limits.
+        app_id=entry.data.get(CONF_APP_ID) or f"ha-{uuid.getnode():x}",
+        area=entry.data[CONF_AREA],
+        municipalities=list(options.get(CONF_MUNICIPALITIES) or []),
+        hours=int(options.get(CONF_HOURS, DEFAULT_HOURS)),
+        max_pages=int(options.get(CONF_MAX_PAGES, DEFAULT_MAX_PAGES)),
         location_keys=location_keys,
-        scan_interval=conf[CONF_SCAN_INTERVAL],
+        scan_interval=timedelta(
+            minutes=int(options.get(CONF_UPDATE_INTERVAL, DEFAULT_UPDATE_INTERVAL))
+        ),
+        entry=entry,
     )
+    await coordinator.async_config_entry_first_refresh()
 
-    # Not async_config_entry_first_refresh(): that helper requires a config
-    # entry, and this integration is set up from YAML. A failed first fetch
-    # leaves the entities unavailable rather than aborting setup.
-    await coordinator.async_refresh()
-
-    hass.data[DOMAIN] = {
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = {
         "coordinator": coordinator,
-        CONF_MAX_ATTRIBUTE_INCIDENTS: conf[CONF_MAX_ATTRIBUTE_INCIDENTS],
-        CONF_MAX_MARKERS: conf[CONF_MAX_MARKERS],
+        CONF_MAX_ATTRIBUTE_INCIDENTS: int(
+            options.get(CONF_MAX_ATTRIBUTE_INCIDENTS, DEFAULT_MAX_ATTRIBUTE_INCIDENTS)
+        ),
+        CONF_MAX_MARKERS: int(options.get(CONF_MAX_MARKERS, DEFAULT_MAX_MARKERS)),
     }
 
-    for platform in PLATFORMS:
-        hass.async_create_task(
-            discovery.async_load_platform(hass, platform, DOMAIN, {}, config)
-        )
-
-    LOGGER.debug(
-        "Set up %s for %s (municipalities=%s, window=%sh, interval=%s)",
-        DOMAIN,
-        conf[CONF_AREA],
-        conf[CONF_MUNICIPALITIES] or "all",
-        conf[CONF_HOURS],
-        conf[CONF_SCAN_INTERVAL],
-    )
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    entry.async_on_unload(entry.add_update_listener(async_reload_entry))
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    if unloaded := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+    return unloaded
+
+
+async def async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Reload when the options change, so a new interval takes effect at once."""
+    await hass.config_entries.async_reload(entry.entry_id)

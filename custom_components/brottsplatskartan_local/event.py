@@ -3,42 +3,42 @@
 from __future__ import annotations
 
 from homeassistant.components.event import EventEntity
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import ATTRIBUTION, DOMAIN, EVENT_NEW_INCIDENT, LOGGER
 from .coordinator import BpkCoordinator
+from .sensor import device_info
 
 EVENT_TYPE_NEW_INCIDENT = "new_incident"
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the event entity."""
-    if discovery_info is None:
-        return
-    coordinator: BpkCoordinator = hass.data[DOMAIN]["coordinator"]
-    async_add_entities([BpkNewIncidentEvent(coordinator)])
+    """Set up the event entity for a config entry."""
+    coordinator: BpkCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
+    async_add_entities([BpkNewIncidentEvent(coordinator, entry)])
 
 
 class BpkNewIncidentEvent(EventEntity):
     """Triggers once per newly seen incident."""
 
     _attr_attribution = ATTRIBUTION
+    _attr_has_entity_name = True
+    _attr_name = "New incident"
     _attr_icon = "mdi:bell-alert"
     _attr_should_poll = False
     _attr_event_types = [EVENT_TYPE_NEW_INCIDENT]
 
-    def __init__(self, coordinator: BpkCoordinator) -> None:
+    def __init__(self, coordinator: BpkCoordinator, entry: ConfigEntry) -> None:
         """Initialize the event entity."""
         self._coordinator = coordinator
-        self._attr_name = f"Brottsplatskartan {coordinator.label} new incident"
-        self._attr_unique_id = f"{coordinator.app_id}_new_incident"
+        self._attr_unique_id = f"{entry.entry_id}_new_incident"
+        self._attr_device_info = device_info(entry)
         self._seen: set[str] = set()
         self._primed = False
 

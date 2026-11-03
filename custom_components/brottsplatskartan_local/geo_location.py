@@ -7,9 +7,9 @@ from typing import Any
 
 from homeassistant.components.geo_location import GeolocationEvent
 from homeassistant.const import UnitOfLength
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.util.location import distance as distance_in_metres
 
 from .api import Incident
@@ -17,19 +17,18 @@ from .const import ATTRIBUTION, CONF_MAX_MARKERS, DOMAIN, LOGGER
 from .coordinator import BpkCoordinator
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
-    async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
+    entry: ConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the geolocation markers."""
-    if discovery_info is None:
-        return
-    data = hass.data[DOMAIN]
-    BpkGeoLocationManager(
+    """Set up the geolocation markers for a config entry."""
+    data = hass.data[DOMAIN][entry.entry_id]
+    manager = BpkGeoLocationManager(
         hass, data["coordinator"], async_add_entities, data[CONF_MAX_MARKERS]
-    ).async_setup()
+    )
+    manager.async_setup()
+    entry.async_on_unload(manager.async_shutdown)
 
 
 class BpkGeoLocationManager:
@@ -39,7 +38,7 @@ class BpkGeoLocationManager:
         self,
         hass: HomeAssistant,
         coordinator: BpkCoordinator,
-        async_add_entities: AddEntitiesCallback,
+        async_add_entities: AddConfigEntryEntitiesCallback,
         max_markers: int,
     ) -> None:
         """Initialize the manager."""
@@ -55,6 +54,13 @@ class BpkGeoLocationManager:
         """Subscribe to coordinator updates and seed the current incidents."""
         self._unsub = self._coordinator.async_add_listener(self._async_sync)
         self._async_sync()
+
+    @callback
+    def async_shutdown(self) -> None:
+        """Stop listening when the entry unloads."""
+        if self._unsub is not None:
+            self._unsub()
+            self._unsub = None
 
     @callback
     def _async_sync(self) -> None:

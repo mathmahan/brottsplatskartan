@@ -14,8 +14,9 @@ which has two behaviours we specifically do not want:
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 import aiohttp
@@ -426,3 +427,42 @@ def filter_by_municipality(
     return [
         incident for incident in incidents if incident.places & municipalities
     ]
+
+
+async def async_discover_municipalities(
+    session: aiohttp.ClientSession,
+    *,
+    app_id: str,
+    area: str,
+    days: int = 7,
+    max_pages: int = 4,
+) -> tuple[list[str], list[str]]:
+    """Look at recent incidents in `area` and report the places found in them.
+
+    Returns `(municipalities, places)`, each ordered most frequent first.
+    `municipalities` holds the kommun names, which is what the config flow
+    offers as options; `places` additionally holds districts and street names,
+    which a user can type in by hand to filter more narrowly.
+
+    Used by the config flow so the municipality picker lists what this county
+    actually reports, rather than a hard-coded table that would go stale.
+    """
+    incidents = await async_fetch_incidents(
+        session,
+        app_id=app_id,
+        area=area,
+        since=dt_util.utcnow() - timedelta(days=days),
+        max_pages=max_pages,
+    )
+    municipalities = Counter(
+        incident.municipality
+        for incident in incidents
+        if incident.municipality is not None
+    )
+    places = Counter(
+        place for incident in incidents for place in incident.raw_places
+    )
+    return (
+        [name for name, _ in municipalities.most_common()],
+        [name for name, _ in places.most_common()],
+    )

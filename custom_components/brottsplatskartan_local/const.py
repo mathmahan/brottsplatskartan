@@ -16,7 +16,11 @@ CONF_MAX_ATTRIBUTE_INCIDENTS = "max_attribute_incidents"
 CONF_MAX_MARKERS = "max_markers"
 CONF_LOCATION_KEYS = "location_keys"
 CONF_APP_ID = "app_id"
+#: Poll interval in whole minutes. Config entries are stored as JSON, so a
+#: timedelta cannot go in there; the YAML path converts to this on import.
+CONF_UPDATE_INTERVAL = "update_interval"
 
+DEFAULT_NAME = "Brottsplatskartan"
 DEFAULT_AREA = "Stockholms län"
 DEFAULT_HOURS = 24
 DEFAULT_MAX_PAGES = 6
@@ -24,6 +28,8 @@ DEFAULT_MAX_ATTRIBUTE_INCIDENTS = 25
 DEFAULT_MAX_MARKERS = 100
 DEFAULT_SCAN_INTERVAL = timedelta(minutes=15)
 MIN_SCAN_INTERVAL = timedelta(minutes=5)
+DEFAULT_UPDATE_INTERVAL = 15
+MIN_UPDATE_INTERVAL = 5
 
 ATTRIBUTION = "Information provided by brottsplatskartan.se"
 

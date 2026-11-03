@@ -5,9 +5,9 @@ the three things that made the official one confusing:
 
 | | Official integration | This one |
 |---|---|---|
-| Area granularity | County only (`Stockholms län`) | County fetch, filtered to municipalities (`Stockholm`) |
+| Area granularity | County only (`Stockholms län`) | County fetch, filtered to municipalities *or districts* (`Stockholm`, `Kungsholmen`) |
 | Time window | Calendar day, resets at local midnight | Rolling N hours (default 24) |
-| Poll interval | Hardcoded 30 min | Configurable, default 15 min, floor 5 min |
+| Poll interval | Hardcoded 30 min | Configurable in the UI, default 15 min, floor 5 min |
 | Empty page mid-pagination | Discards everything collected so far → count drops to 0 | Keeps what it has |
 | Out-of-order row | Stops paging at the first one → undercounts | Pages until a whole page is out of window |
 | Incident detail | Count + per-type counts | Count, per-type, full list, map markers, events |
@@ -24,33 +24,55 @@ Integration), or copy the component folder in by hand:
 cp -r custom_components/brottsplatskartan_local <config>/custom_components/
 ```
 
-Then restart Home Assistant. You can run this alongside the official
-integration — the domain is different, so nothing collides.
+Restart Home Assistant, then go to **Settings → Devices & services → Add
+integration** and search for *Brottsplatskartan (local)*.
+
+You can run this alongside the official integration — the domain is different,
+so nothing collides. You can also add it more than once, for example one entry
+for your own municipality and another for the whole county.
 
 ## Configure
 
-In `configuration.yaml`:
+Setup is two steps in the UI:
 
-```yaml
-brottsplatskartan_local:
-  area: "Stockholms län"
-  municipalities:
-    - Stockholm
-  hours: 24
-  scan_interval: "00:15:00"
-```
+1. **Pick a county.** The API only accepts whole counties, so this is as
+   coarse as the fetch gets.
+2. **Narrow it down.** The integration queries the county first and lists the
+   municipalities actually reporting incidents right now, so you pick from
+   real values rather than a hard-coded table that would go stale. The field is
+   open, so you can also type a **district** — `Kungsholmen`, `Södermalm`,
+   `Norrmalm` — because the filter matches any component of the location the
+   API reports. Leave it empty to count the whole county.
+
+Everything except the county is editable afterwards under **Configure**, and
+changes apply immediately — no restart.
 
 | Option | Default | Notes |
 |---|---|---|
-| `area` | `Stockholms län` | Must be one of the 21 counties the API accepts. |
-| `municipalities` | `[]` | Filters the county down. Empty = whole county. Matches a **municipality or a district** — `Stockholm`, but also `Kungsholmen`, `Södermalm`, `Norrmalm`. Case- and suffix-insensitive, so `Stockholm` ≡ `Stockholms kommun` ≡ `Stockholms stad`. Comparison is exact, so `Stockholmsvägen` in Nacka does *not* count as Stockholm. |
-| `hours` | `24` | Rolling window, 1–168. |
-| `scan_interval` | `00:15:00` | Minimum 5 minutes — the API rate-limits per app id. |
-| `max_pages` | `6` | Pagination safety stop. Raise it if a wide window looks truncated. |
-| `max_attribute_incidents` | `25` | How many incidents to put in the sensor attributes. `0` omits the list. |
-| `max_markers` | `100` | Cap on map markers. A wide window over a whole county can return hundreds of incidents; the newest are kept. `0` = no cap. |
-| `location_keys` | *(auto)* | Override which API fields are treated as the municipality. Only needed if the API renames them — see `probe_api.py`. |
-| `app_id` | `ha-<machine id>` | Rate-limit identity. Keep it stable. |
+| County | `Stockholms län` | Set at setup. To watch a different one, add a second entry. |
+| Municipalities or districts | *(empty)* | Empty = whole county. Matches a municipality **or** a district. Case- and suffix-insensitive, so `Stockholm` ≡ `Stockholms kommun` ≡ `Stockholms stad`. Comparison is exact, so `Stockholmsvägen` in Nacka does *not* count as Stockholm. |
+| Time window | `24 h` | Rolling, 1–168 h. Does not reset at midnight. |
+| Update interval | `15 min` | Minimum 5 — the API rate-limits per installation. |
+| Incidents listed in attributes | `25` | How many to expose for dashboard cards. `0` omits the list. |
+| Maximum map markers | `100` | A wide window over a whole county can return hundreds of incidents; the newest are kept. `0` = no cap. |
+| Maximum API pages per update | `6` | Pagination safety stop. Raise it if a long window looks truncated. |
+
+The UI is translated into English and Swedish.
+
+### Upgrading from the YAML version
+
+An existing `brottsplatskartan_local:` block in `configuration.yaml` is
+imported into a config entry on the next restart, keeping your settings. Once
+the integration shows up under Devices & services, delete the block.
+
+Entity ids are unchanged, so dashboards and automations keep working. The
+entities' internal unique ids *did* change, so if you ran the YAML version the
+old entities will linger as unavailable — remove them from
+**Settings → Devices & services → Entities** once the new ones appear.
+
+There is also one advanced option with no UI field, since it only matters if
+the API renames something: `location_keys`, which overrides the list of fields
+treated as place names. Set it in YAML and let the import carry it over.
 
 ## Entities
 
@@ -170,6 +192,7 @@ python3 tests/test_api.py
 
 ```bash
 python3 tests/test_real_schema.py
+python3 tests/test_config_flow.py
 ```
 
 `test_api.py` covers the rolling window, pagination, both upstream bugs,
@@ -179,20 +202,30 @@ in the confirmed field names, including the cases that matter for filtering: a
 street called `Stockholmsvägen` in Nacka must not count as Stockholm, and a row
 whose only location is `Stockholms län` must not match any municipality.
 
-Both run with stubbed Home Assistant modules (`tests/stubs/`), so no Home
+`test_config_flow.py` checks the flow schemas: that defaults land where
+intended, that saved options are pre-filled rather than reset (including a
+saved `0`), that `NumberSelector`'s floats are stored as ints, and that a YAML
+import maps onto the new options correctly.
+
+All three run with stubbed Home Assistant modules (`tests/stubs/`), so no Home
 Assistant install is required and no real network request is made.
 
 ## Layout
 
 ```
 custom_components/brottsplatskartan_local/
-  api.py           direct API client: paging, window filter, field normalization
-  coordinator.py   DataUpdateCoordinator, municipality filtering, per-type counts
-  sensor.py        count sensor + latest-incident sensor
-  geo_location.py  one map marker per incident, added/removed as they come and go
-  event.py         fires on each newly seen incident
-tools/probe_api.py     what the API actually returns, for debugging counts
-tests/test_api.py      fetch, paging and window logic
-tests/test_real_schema.py  parsing and filtering against real captured rows
-dashboard.yaml         Lovelace cards and automations
+  api.py            direct API client: paging, window filter, field normalization
+  coordinator.py    DataUpdateCoordinator, place filtering, per-type counts
+  config_flow.py    two-step UI setup with live municipality discovery, options flow
+  sensor.py         count sensor + latest-incident sensor
+  geo_location.py   one map marker per incident, added/removed as they come and go
+  event.py          fires on each newly seen incident
+  strings.json      UI labels and help text
+  translations/     en, sv
+tools/probe_api.py          what the API actually returns, for debugging counts
+tests/test_api.py           fetch, paging and window logic
+tests/test_real_schema.py   parsing and filtering against real captured rows
+tests/test_config_flow.py   flow schemas, defaults, YAML import
+tests/stubs/                minimal Home Assistant modules, so tests need no install
+dashboard.yaml              Lovelace cards and automations
 ```
