@@ -101,51 +101,49 @@ entity only holds the most recent).
 
 ## Dashboard
 
-`dashboard.yaml` holds ready-made cards — paste the one you want into a
-dashboard in YAML mode (or the raw config editor):
+`dashboard.yaml` is a **complete dashboard document**, so paste the whole file
+into:
 
-1. **Map** with a marker per incident. Requires `geo_location_sources`.
-2. **Incident feed** — type, relative time, place, description, and links to
-   both Brottsplatskartan and the police's own report.
-3. **Summary** — count plus a per-crime-type breakdown.
-4. **Latest incident** rendered with the API's static map image.
-5. **Trend** — a statistics graph over 30 days (the count sensor sets
-   `state_class: measurement`, so long-term statistics work out of the box).
-6. **"Nearest incident"** template sensor, derived from the markers' distances,
-   plus a conditional card that only appears when something happens close by.
+> Settings → Dashboards → *your dashboard* → ✏️ → ⋮ → **Raw configuration editor**
 
-The same file has automations for a rich mobile notification with the map
-image and action buttons, and one that only fires for incidents within 1 km.
+To take a single card instead, use **Add card → Manual** and paste one entry
+from under `cards:`.
 
-## Automation example
+> If you paste `dashboard.yaml` into the raw editor and get *"Expected an
+> object, but received: \[object Object\],…"*, you have an older copy of the
+> file — it used to be a bare list of cards, which the raw editor rejects
+> because it wants a whole dashboard. Pull the latest version.
 
-```yaml
-automation:
-  - alias: "Notify on new incident"
-    trigger:
-      - platform: event
-        event_type: brottsplatskartan_local_new_incident
-    action:
-      - service: notify.mobile_app_phone
-        data:
-          title: "{{ trigger.event.data.type }} i {{ trigger.event.data.municipality }}"
-          message: "{{ trigger.event.data.title }}"
-          data:
-            url: "{{ trigger.event.data.url }}"
-```
+The eight cards:
 
-## Keep the recorder lean
+1. **Map** — a marker per incident. Needs `geo_location_sources`; without it
+   the card renders empty.
+2. **Summary** — count plus a per-crime-type breakdown.
+3. **Latest incident** — rendered with the API's own static map image.
+4. **Feed** — type, relative time, place, description, and links to both
+   Brottsplatskartan and the police's own report.
+5. **Trend** — a 30-day statistics graph. Works out of the box, since the
+   count sensor sets `state_class: measurement`.
+6. **Last week** — a plain history graph.
+7. **Overview** — a compact entities card.
+8. **Proximity alert** — a conditional card that only appears when something
+   happened within 2 km.
 
-The `incidents` attribute is a list, so exclude it from history:
+The last two need the `nearest_incident` template sensor below; without it
+they show as unavailable. Delete them if you skip it.
 
-```yaml
-recorder:
-  exclude:
-    entity_globs:
-      - geo_location.brottsplatskartan*
-    entities:
-      - sensor.brottsplatskartan_stockholm_latest_incident
-```
+### configuration.yaml additions
+
+`examples/configuration.yaml` holds the parts that are **not** dashboard
+cards — a `nearest_incident` template sensor derived from the markers'
+distances, a per-crime-type sensor, a rich mobile notification with the map
+image, a proximity-filtered notification, and recorder exclusions. These go in
+`configuration.yaml` and need a restart.
+
+If your `configuration.yaml` already has a `template:`, `automation:` or
+`recorder:` key, merge the list items into the key you have rather than
+pasting a second one — duplicate keys at the same level make Home Assistant
+reject the config.
 
 ## API fields
 
@@ -227,5 +225,6 @@ tests/test_api.py           fetch, paging and window logic
 tests/test_real_schema.py   parsing and filtering against real captured rows
 tests/test_config_flow.py   flow schemas, defaults, YAML import
 tests/stubs/                minimal Home Assistant modules, so tests need no install
-dashboard.yaml              Lovelace cards and automations
+dashboard.yaml              a complete dashboard, 8 cards
+examples/configuration.yaml template sensors, automations, recorder excludes
 ```

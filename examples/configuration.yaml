@@ -1,0 +1,102 @@
+# ---------------------------------------------------------------------------
+# Brottsplatskartan (local) — configuration.yaml additions.
+#
+# These are NOT dashboard cards. They go in configuration.yaml (or in the
+# files it includes), and they need a restart.
+#
+# IMPORTANT: if your configuration.yaml already has a `template:`,
+# `automation:` or `recorder:` key, do not paste a second one — YAML does not
+# allow duplicate keys at the same level and Home Assistant will refuse the
+# config. Merge the list items into the key you already have.
+#
+# The integration itself needs nothing here: it is configured in the UI under
+# Settings -> Devices & services.
+# ---------------------------------------------------------------------------
+
+template:
+  # Distance to the closest incident, derived from the geo_location markers,
+  # whose state is already the distance from home in km.
+  - sensor:
+      - name: "Brottsplatskartan nearest incident"
+        unique_id: bpk_nearest_incident
+        unit_of_measurement: km
+        state_class: measurement
+        icon: mdi:map-marker-distance
+        state: >-
+          {% set m = states.geo_location
+               | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+               | rejectattr('state', 'in', ['unknown', 'unavailable'])
+               | list %}
+          {{ (m | map(attribute='state') | map('float') | list | min)
+             if m else none }}
+        attributes:
+          headline: >-
+            {% set m = states.geo_location
+                 | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+                 | rejectattr('state', 'in', ['unknown', 'unavailable'])
+                 | list | sort(attribute='state') %}
+            {{ m[0].attributes.headline if m else none }}
+          url: >-
+            {% set m = states.geo_location
+                 | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
+                 | rejectattr('state', 'in', ['unknown', 'unavailable'])
+                 | list | sort(attribute='state') %}
+            {{ m[0].attributes.url if m else none }}
+
+      # One crime type on its own, for a gauge or a threshold automation.
+      - name: "Brottsplatskartan thefts"
+        unique_id: bpk_thefts
+        state_class: measurement
+        state: >-
+          {{ (state_attr('sensor.brottsplatskartan_stockholm_incidents', 'by_type')
+              or {}).get('Stöld', 0) }}
+
+automation:
+  # Rich notification per new incident. Uses the bus event rather than the
+  # event entity, because several incidents can arrive in one poll and the
+  # entity only holds the most recent.
+  - alias: "Brottsplatskartan: new incident"
+    mode: queued
+    max: 10
+    triggers:
+      - trigger: event
+        event_type: brottsplatskartan_local_new_incident
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: "{{ trigger.event.data.type }} — {{ trigger.event.data.place }}"
+          message: "{{ trigger.event.data.description or trigger.event.data.title }}"
+          data:
+            image: "{{ trigger.event.data.image_wide }}"
+            url: "{{ trigger.event.data.url }}"
+
+  # Only notify for incidents close to home.
+  - alias: "Brottsplatskartan: incident within 1 km"
+    triggers:
+      - trigger: event
+        event_type: brottsplatskartan_local_new_incident
+    conditions:
+      - condition: template
+        value_template: >-
+          {% set lat = trigger.event.data.latitude %}
+          {% set lng = trigger.event.data.longitude %}
+          {{ lat is not none and lng is not none
+             and distance(lat, lng) is not none
+             and distance(lat, lng) | float < 1 }}
+    actions:
+      - action: notify.mobile_app_your_phone
+        data:
+          title: >-
+            {{ trigger.event.data.type }}
+            {{ distance(trigger.event.data.latitude,
+                        trigger.event.data.longitude) | round(1) }} km bort
+          message: "{{ trigger.event.data.title }}"
+
+recorder:
+  exclude:
+    entity_globs:
+      # Transient, one per incident, and their state is just a distance.
+      - geo_location.*
+    entities:
+      # Carries a long description and image URLs in its attributes.
+      - sensor.brottsplatskartan_stockholm_latest_incident
