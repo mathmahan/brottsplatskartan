@@ -56,35 +56,49 @@ def _at_least_min_interval(value: timedelta) -> timedelta:
     return value
 
 
+def _empty_to_dict(value: object) -> object:
+    """Treat a bare `brottsplatskartan_local:` key as an empty mapping.
+
+    YAML parses a key with nothing under it as None, which the inner schema
+    rejects outright. Someone upgrading may well have stripped their block down
+    to just the key, and that should import with defaults rather than fail the
+    whole configuration.
+    """
+    return {} if value is None else value
+
+
 # Retained only so an existing YAML block can be imported. New installations
 # configure the integration from the UI.
 CONFIG_SCHEMA = vol.Schema(
     {
-        DOMAIN: vol.Schema(
-            {
-                vol.Optional(CONF_AREA, default=DEFAULT_AREA): vol.In(AREAS),
-                vol.Optional(CONF_MUNICIPALITIES, default=[]): vol.All(
-                    cv.ensure_list, [cv.string]
-                ),
-                vol.Optional(CONF_HOURS, default=DEFAULT_HOURS): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=168)
-                ),
-                vol.Optional(CONF_MAX_PAGES, default=DEFAULT_MAX_PAGES): vol.All(
-                    vol.Coerce(int), vol.Range(min=1, max=40)
-                ),
-                vol.Optional(
-                    CONF_MAX_ATTRIBUTE_INCIDENTS,
-                    default=DEFAULT_MAX_ATTRIBUTE_INCIDENTS,
-                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=200)),
-                vol.Optional(
-                    CONF_MAX_MARKERS, default=DEFAULT_MAX_MARKERS
-                ): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
-                vol.Optional(CONF_LOCATION_KEYS): vol.All(cv.ensure_list, [cv.string]),
-                vol.Optional(CONF_APP_ID): cv.string,
-                vol.Optional(
-                    CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
-                ): vol.All(cv.time_period, _at_least_min_interval),
-            }
+        DOMAIN: vol.All(
+            _empty_to_dict,
+            vol.Schema(
+                {
+                    vol.Optional(CONF_AREA, default=DEFAULT_AREA): vol.In(AREAS),
+                    vol.Optional(CONF_MUNICIPALITIES, default=[]): vol.All(
+                        cv.ensure_list, [cv.string]
+                    ),
+                    vol.Optional(CONF_HOURS, default=DEFAULT_HOURS): vol.All(
+                        vol.Coerce(int), vol.Range(min=1, max=168)
+                    ),
+                    vol.Optional(CONF_MAX_PAGES, default=DEFAULT_MAX_PAGES): vol.All(
+                        vol.Coerce(int), vol.Range(min=1, max=40)
+                    ),
+                    vol.Optional(
+                        CONF_MAX_ATTRIBUTE_INCIDENTS,
+                        default=DEFAULT_MAX_ATTRIBUTE_INCIDENTS,
+                    ): vol.All(vol.Coerce(int), vol.Range(min=0, max=200)),
+                    vol.Optional(
+                        CONF_MAX_MARKERS, default=DEFAULT_MAX_MARKERS
+                    ): vol.All(vol.Coerce(int), vol.Range(min=0, max=500)),
+                    vol.Optional(CONF_LOCATION_KEYS): vol.All(cv.ensure_list, [cv.string]),
+                    vol.Optional(CONF_APP_ID): cv.string,
+                    vol.Optional(
+                        CONF_SCAN_INTERVAL, default=DEFAULT_SCAN_INTERVAL
+                    ): vol.All(cv.time_period, _at_least_min_interval),
+                }
+            ),
         )
     },
     extra=vol.ALLOW_EXTRA,

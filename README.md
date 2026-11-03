@@ -132,18 +132,30 @@ The eight cards:
 The last two need the `nearest_incident` template sensor below; without it
 they show as unavailable. Delete them if you skip it.
 
-### configuration.yaml additions
+### The rest: template sensors, automations, recorder
 
-`examples/configuration.yaml` holds the parts that are **not** dashboard
-cards — a `nearest_incident` template sensor derived from the markers'
-distances, a per-crime-type sensor, a rich mobile notification with the map
-image, a proximity-filtered notification, and recorder exclusions. These go in
-`configuration.yaml` and need a restart.
+A stock Home Assistant `configuration.yaml` already has
+`automation: !include automations.yaml`, so these are split by where they
+actually belong. Adding a second `automation:` key makes Home Assistant reject
+the whole configuration.
 
-If your `configuration.yaml` already has a `template:`, `automation:` or
-`recorder:` key, merge the list items into the key you have rather than
-pasting a second one — duplicate keys at the same level make Home Assistant
-reject the config.
+**`examples/configuration.yaml`** → append to `configuration.yaml`. Holds
+`template:` (the `nearest_incident` sensor the last two cards need, plus a
+per-crime-type sensor) and `recorder:` exclusions. If you already have a
+`template:` or `recorder:` key, merge the items into the one you have.
+
+**`examples/automations.yaml`** → append to your `automations.yaml`, keeping
+the leading `- `. Two automations: a rich mobile notification carrying the
+API's map image, and one filtered to incidents within 1 km.
+
+Better still for the automations: **Settings → Automations & scenes → Create
+automation → ⋮ → Edit in YAML**, then paste one automation's body without its
+leading `- `. Home Assistant assigns the id and the automation stays editable
+in the UI. Note that Home Assistant rewrites `automations.yaml` whenever you
+save an automation in the UI, which strips hand-written comments.
+
+Both need a restart. Replace `notify.mobile_app_your_phone` with your own
+notify service.
 
 ## API fields
 
@@ -191,6 +203,8 @@ python3 tests/test_api.py
 ```bash
 python3 tests/test_real_schema.py
 python3 tests/test_config_flow.py
+python3 tests/test_yaml_import.py
+python3 tests/test_examples.py
 ```
 
 `test_api.py` covers the rolling window, pagination, both upstream bugs,
@@ -205,8 +219,20 @@ intended, that saved options are pre-filled rather than reset (including a
 saved `0`), that `NumberSelector`'s floats are stored as ints, and that a YAML
 import maps onto the new options correctly.
 
-All three run with stubbed Home Assistant modules (`tests/stubs/`), so no Home
-Assistant install is required and no real network request is made.
+`test_yaml_import.py` runs a real installation's `configuration.yaml` block
+through `CONFIG_SCHEMA` and the import step, checking that
+`scan_interval: "00:15:00"` becomes 15 whole minutes (a config entry is JSON
+and cannot hold a timedelta) and that a too-short interval is rejected rather
+than silently raised.
+
+`test_examples.py` checks the *shape* of `dashboard.yaml` and the example
+config files — that the dashboard is a mapping with `views` rather than a bare
+card list, and that nothing is offered under a key a stock
+`configuration.yaml` already defines. Both of those were wrong at one point
+while being perfectly valid YAML, which is exactly what a parse check misses.
+
+All of them run with stubbed Home Assistant modules (`tests/stubs/`), so no
+Home Assistant install is required and no real network request is made.
 
 ## Layout
 
@@ -223,8 +249,11 @@ custom_components/brottsplatskartan_local/
 tools/probe_api.py          what the API actually returns, for debugging counts
 tests/test_api.py           fetch, paging and window logic
 tests/test_real_schema.py   parsing and filtering against real captured rows
-tests/test_config_flow.py   flow schemas, defaults, YAML import
+tests/test_config_flow.py   flow schemas and defaults
+tests/test_yaml_import.py   a real configuration.yaml block through the import
 tests/stubs/                minimal Home Assistant modules, so tests need no install
-dashboard.yaml              a complete dashboard, 8 cards
-examples/configuration.yaml template sensors, automations, recorder excludes
+dashboard.yaml                 a complete dashboard, 8 cards
+examples/configuration.yaml    template sensors + recorder excludes
+examples/automations.yaml      two notification automations
+tests/test_examples.py         structural checks on the files above
 ```

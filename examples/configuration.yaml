@@ -1,13 +1,14 @@
 # ---------------------------------------------------------------------------
-# Brottsplatskartan (local) — configuration.yaml additions.
+# Brottsplatskartan (local) — additions for configuration.yaml.
 #
-# These are NOT dashboard cards. They go in configuration.yaml (or in the
-# files it includes), and they need a restart.
+# These are NOT dashboard cards (those are in ../dashboard.yaml) and NOT
+# automations (those are in ./automations.yaml, because a default Home
+# Assistant configuration already has `automation: !include automations.yaml`
+# and a second `automation:` key would make HA reject the whole config).
 #
-# IMPORTANT: if your configuration.yaml already has a `template:`,
-# `automation:` or `recorder:` key, do not paste a second one — YAML does not
-# allow duplicate keys at the same level and Home Assistant will refuse the
-# config. Merge the list items into the key you already have.
+# Append these two keys to configuration.yaml and restart. If you already have
+# a `template:` or `recorder:` key, merge the items into the key you have
+# rather than adding a second one.
 #
 # The integration itself needs nothing here: it is configured in the UI under
 # Settings -> Devices & services.
@@ -51,51 +52,10 @@ template:
           {{ (state_attr('sensor.brottsplatskartan_stockholm_incidents', 'by_type')
               or {}).get('Stöld', 0) }}
 
-automation:
-  # Rich notification per new incident. Uses the bus event rather than the
-  # event entity, because several incidents can arrive in one poll and the
-  # entity only holds the most recent.
-  - alias: "Brottsplatskartan: new incident"
-    mode: queued
-    max: 10
-    triggers:
-      - trigger: event
-        event_type: brottsplatskartan_local_new_incident
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          title: "{{ trigger.event.data.type }} — {{ trigger.event.data.place }}"
-          message: "{{ trigger.event.data.description or trigger.event.data.title }}"
-          data:
-            image: "{{ trigger.event.data.image_wide }}"
-            url: "{{ trigger.event.data.url }}"
-
-  # Only notify for incidents close to home.
-  - alias: "Brottsplatskartan: incident within 1 km"
-    triggers:
-      - trigger: event
-        event_type: brottsplatskartan_local_new_incident
-    conditions:
-      - condition: template
-        value_template: >-
-          {% set lat = trigger.event.data.latitude %}
-          {% set lng = trigger.event.data.longitude %}
-          {{ lat is not none and lng is not none
-             and distance(lat, lng) is not none
-             and distance(lat, lng) | float < 1 }}
-    actions:
-      - action: notify.mobile_app_your_phone
-        data:
-          title: >-
-            {{ trigger.event.data.type }}
-            {{ distance(trigger.event.data.latitude,
-                        trigger.event.data.longitude) | round(1) }} km bort
-          message: "{{ trigger.event.data.title }}"
-
 recorder:
   exclude:
     entity_globs:
-      # Transient, one per incident, and their state is just a distance.
+      # Transient, one per incident, and their state is only a distance.
       - geo_location.*
     entities:
       # Carries a long description and image URLs in its attributes.

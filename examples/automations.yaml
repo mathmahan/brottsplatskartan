@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# Brottsplatskartan (local) — automations.
+#
+# These are list items for your existing automations.yaml (the file that
+# `automation: !include automations.yaml` points at). Append them to that
+# file, keeping the `- ` at this indentation. Do NOT wrap them in an
+# `automation:` key, and do not paste them into configuration.yaml.
+#
+# Alternatively, and more robustly: Settings -> Automations & scenes ->
+# Create automation -> ⋮ -> Edit in YAML, then paste one automation's body
+# without its leading `- `. Home Assistant assigns the id itself, and the
+# automation stays editable in the UI.
+#
+# Note: Home Assistant rewrites automations.yaml whenever you save an
+# automation in the UI editor. The automations survive, but these comments
+# will not.
+#
+# Replace notify.mobile_app_your_phone with your own notify service.
+# ---------------------------------------------------------------------------
+
+# Rich notification per new incident, with the API's map image attached.
+# Uses the bus event rather than the event entity, because several incidents
+# can arrive in one poll and the entity only holds the most recent.
+- id: brottsplatskartan_new_incident
+  alias: "Brottsplatskartan: new incident"
+  mode: queued
+  max: 10
+  triggers:
+    - trigger: event
+      event_type: brottsplatskartan_local_new_incident
+  actions:
+    - action: notify.mobile_app_your_phone
+      data:
+        title: "{{ trigger.event.data.type }} — {{ trigger.event.data.place }}"
+        message: "{{ trigger.event.data.description or trigger.event.data.title }}"
+        data:
+          image: "{{ trigger.event.data.image_wide }}"
+          url: "{{ trigger.event.data.url }}"
+
+# Only notify for incidents close to home.
+- id: brottsplatskartan_incident_nearby
+  alias: "Brottsplatskartan: incident within 1 km"
+  mode: queued
+  max: 10
+  triggers:
+    - trigger: event
+      event_type: brottsplatskartan_local_new_incident
+  conditions:
+    - condition: template
+      value_template: >-
+        {% set lat = trigger.event.data.latitude %}
+        {% set lng = trigger.event.data.longitude %}
+        {{ lat is not none and lng is not none
+           and distance(lat, lng) is not none
+           and distance(lat, lng) | float < 1 }}
+  actions:
+    - action: notify.mobile_app_your_phone
+      data:
+        title: >-
+          {{ trigger.event.data.type }}
+          {{ distance(trigger.event.data.latitude,
+                      trigger.event.data.longitude) | round(1) }} km bort
+        message: "{{ trigger.event.data.title }}"
