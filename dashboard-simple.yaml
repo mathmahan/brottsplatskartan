@@ -21,6 +21,10 @@
 # need templating. You do not lose access to the detail, though — click any
 # marker on the map and the dialog shows the headline, description, place and
 # both links.
+#
+# Nothing here needs a helper or a template sensor: the nearest-incident
+# distance and the proximity flag are entities the integration provides, and
+# the proximity radius is set in the integration's options.
 # ---------------------------------------------------------------------------
 
 views:
@@ -49,6 +53,25 @@ views:
         name: Senaste händelsen
         icon: mdi:alert-circle-outline
 
+      # Distance to the closest incident. <<< entity id
+      - type: tile
+        entity: sensor.brottsplatskartan_stockholm_nearest_incident
+        name: Närmaste händelse
+        icon: mdi:map-marker-distance
+
+      # Only appears while something is inside the radius set in the
+      # integration's options. No template, no helper. <<< entity ids
+      - type: conditional
+        conditions:
+          - condition: state
+            entity: binary_sensor.brottsplatskartan_stockholm_incident_nearby
+            state: "on"
+        card:
+          type: tile
+          entity: sensor.brottsplatskartan_stockholm_nearest_incident
+          name: Händelse i närheten
+          icon: mdi:map-marker-alert
+
       # Everything in one list; click a row for its attributes.
       # <<< entity ids
       - type: entities
@@ -60,10 +83,10 @@ views:
             name: Senaste händelsen
           - entity: event.brottsplatskartan_stockholm_new_incident
             name: Senaste larm
-          # Needs the template sensor from examples/configuration.yaml.
-          # Delete this row if you skipped it.
-          - entity: sensor.brottsplatskartan_nearest_incident
+          - entity: sensor.brottsplatskartan_stockholm_nearest_incident
             name: Närmaste händelse
+          - entity: binary_sensor.brottsplatskartan_stockholm_incident_nearby
+            name: Händelse i närheten
 
       # The last week. <<< entity id
       - type: history-graph

@@ -11,55 +11,170 @@
           "area": "The API only accepts whole counties. Filtering to a municipality happens in the next step."
         }
       },
-      "places": {
+      "settings": {
         "title": "Narrow it down",
-        "description": "Municipalities reporting incidents in {area} right now: {found}.\n\nLeave the field empty to count the whole county. You can also type a district or neighbourhood by hand, for example Kungsholmen or Södermalm — anything the API names as part of a location will match.",
+        "description": "Municipalities reporting incidents in {area} right now: {found}.\n\nLeave the places field empty to count the whole county. You can also type a district by hand, for example Kungsholmen or Södermalm — anything the API names as part of a location will match.",
         "data": {
           "municipalities": "Municipalities or districts",
           "hours": "Time window",
           "update_interval": "Update interval",
-          "max_attribute_incidents": "Incidents listed in attributes",
-          "max_markers": "Maximum map markers",
-          "max_pages": "Maximum API pages per update"
+          "nearby_radius": "Nearby radius"
         },
         "data_description": {
-          "municipalities": "Matching ignores case and the kommun/stad suffixes. Comparison is exact, so a street called Stockholmsvägen in Nacka does not count as Stockholm.",
+          "municipalities": "Leave empty for the whole county. Matching ignores case and the kommun/stad suffixes. Comparison is exact, so a street called Stockholmsvägen in Nacka does not count as Stockholm.",
           "hours": "A rolling window, so the count does not reset at midnight.",
           "update_interval": "The API rate-limits per installation; five minutes is the lowest allowed.",
-          "max_attribute_incidents": "How many incidents to put in the sensor's attributes for dashboard cards. 0 omits the list.",
-          "max_markers": "A wide window over a whole county can return hundreds of incidents. The newest are kept. 0 means no cap.",
-          "max_pages": "Safety stop for pagination. Raise it if a long time window looks truncated."
+          "nearby_radius": "How close an incident has to be for the 'Incident nearby' sensor to turn on."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "You should not need to change these.",
+            "data": {
+              "max_attribute_incidents": "Incidents listed in attributes",
+              "max_markers": "Maximum map markers",
+              "max_pages": "Maximum API pages per update",
+              "location_keys": "Location fields",
+              "app_id": "API client id"
+            },
+            "data_description": {
+              "max_attribute_incidents": "How many incidents to put in the sensor's attributes for dashboard cards. 0 omits the list.",
+              "max_markers": "A wide window over a whole county can return hundreds of incidents. The newest are kept. 0 means no cap.",
+              "max_pages": "Safety stop for pagination. Raise it if a long time window looks truncated.",
+              "location_keys": "Which API fields are treated as place names. Only change this if the API renames them and the municipality filter stops matching.",
+              "app_id": "Identifies this installation to the API for rate limiting. Change it only if you are being rate limited."
+            }
+          }
+        }
+      },
+      "reconfigure": {
+        "title": "Change county",
+        "description": "Pick a different county for this entry. You will be able to adjust the places and everything else on the next screen.",
+        "data": {
+          "area": "County"
+        },
+        "data_description": {
+          "area": "The API only accepts whole counties. Filtering to a municipality happens in the next step."
+        }
+      },
+      "reconfigure_settings": {
+        "title": "Narrow it down",
+        "description": "Municipalities reporting incidents in {area} right now: {found}.\n\nLeave the places field empty to count the whole county. You can also type a district by hand, for example Kungsholmen or Södermalm — anything the API names as part of a location will match.",
+        "data": {
+          "municipalities": "Municipalities or districts",
+          "hours": "Time window",
+          "update_interval": "Update interval",
+          "nearby_radius": "Nearby radius"
+        },
+        "data_description": {
+          "municipalities": "Leave empty for the whole county. Matching ignores case and the kommun/stad suffixes. Comparison is exact, so a street called Stockholmsvägen in Nacka does not count as Stockholm.",
+          "hours": "A rolling window, so the count does not reset at midnight.",
+          "update_interval": "The API rate-limits per installation; five minutes is the lowest allowed.",
+          "nearby_radius": "How close an incident has to be for the 'Incident nearby' sensor to turn on."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "You should not need to change these.",
+            "data": {
+              "max_attribute_incidents": "Incidents listed in attributes",
+              "max_markers": "Maximum map markers",
+              "max_pages": "Maximum API pages per update",
+              "location_keys": "Location fields",
+              "app_id": "API client id"
+            },
+            "data_description": {
+              "max_attribute_incidents": "How many incidents to put in the sensor's attributes for dashboard cards. 0 omits the list.",
+              "max_markers": "A wide window over a whole county can return hundreds of incidents. The newest are kept. 0 means no cap.",
+              "max_pages": "Safety stop for pagination. Raise it if a long time window looks truncated.",
+              "location_keys": "Which API fields are treated as place names. Only change this if the API renames them and the municipality filter stops matching.",
+              "app_id": "Identifies this installation to the API for rate limiting. Change it only if you are being rate limited."
+            }
+          }
         }
       }
     },
     "abort": {
-      "already_configured": "That county and municipality combination is already set up."
+      "already_configured": "An entry already covers that county and those places.",
+      "reconfigure_successful": "Updated."
     },
     "error": {
-      "cannot_connect": "Could not reach brottsplatskartan.se.",
-      "rate_limited": "brottsplatskartan.se is rate limiting this installation. Try again later."
+      "cannot_connect": "Could not reach brottsplatskartan.se."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Brottsplatskartan options",
-        "description": "Watching {area}. Changes apply immediately — no restart needed.",
+        "description": "Watching {area}. Municipalities reporting incidents there right now: {found}.\n\nChanges apply immediately — no restart needed.",
         "data": {
           "municipalities": "Municipalities or districts",
           "hours": "Time window",
           "update_interval": "Update interval",
-          "max_attribute_incidents": "Incidents listed in attributes",
-          "max_markers": "Maximum map markers",
-          "max_pages": "Maximum API pages per update"
+          "nearby_radius": "Nearby radius"
         },
         "data_description": {
-          "municipalities": "Leave empty for the whole county. Districts can be typed by hand.",
+          "municipalities": "Leave empty for the whole county. Matching ignores case and the kommun/stad suffixes. Comparison is exact, so a street called Stockholmsvägen in Nacka does not count as Stockholm.",
           "hours": "A rolling window, so the count does not reset at midnight.",
-          "update_interval": "Minimum five minutes, to stay inside the API's rate limit.",
-          "max_attribute_incidents": "0 omits the incident list from the sensor's attributes.",
-          "max_markers": "0 means no cap.",
-          "max_pages": "Raise it if a long time window looks truncated."
+          "update_interval": "The API rate-limits per installation; five minutes is the lowest allowed.",
+          "nearby_radius": "How close an incident has to be for the 'Incident nearby' sensor to turn on."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "description": "You should not need to change these.",
+            "data": {
+              "max_attribute_incidents": "Incidents listed in attributes",
+              "max_markers": "Maximum map markers",
+              "max_pages": "Maximum API pages per update",
+              "location_keys": "Location fields",
+              "app_id": "API client id"
+            },
+            "data_description": {
+              "max_attribute_incidents": "How many incidents to put in the sensor's attributes for dashboard cards. 0 omits the list.",
+              "max_markers": "A wide window over a whole county can return hundreds of incidents. The newest are kept. 0 means no cap.",
+              "max_pages": "Safety stop for pagination. Raise it if a long time window looks truncated.",
+              "location_keys": "Which API fields are treated as place names. Only change this if the API renames them and the municipality filter stops matching.",
+              "app_id": "Identifies this installation to the API for rate limiting. Change it only if you are being rate limited."
+            }
+          }
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "An entry already covers that county and those places."
+    }
+  },
+  "issues": {
+    "overlapping_entries": {
+      "title": "Two entries cover the same incidents",
+      "description": "**{entry}** covers some of the same incidents as **{others}**.\n\nEach entry adds its own map marker per incident, so incidents covered by both appear more than once on the map, and they are counted separately.\n\nThis is a valid setup if you meant it. If not, delete the entry you do not want under Settings → Devices & services → Brottsplatskartan (local)."
+    },
+    "duplicate_entries": {
+      "title": "Duplicate entries",
+      "description": "**{entry}** covers exactly the same county and places as **{other}**. One of them is redundant — delete it under Settings → Devices & services → Brottsplatskartan (local)."
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Refresh",
+      "description": "Fetches from brottsplatskartan.se straight away instead of waiting for the next update."
+    },
+    "get_incidents": {
+      "name": "Get incidents",
+      "description": "Returns the current incidents as response data, for use in a script or template. Not limited by the 'Incidents listed in attributes' option.",
+      "fields": {
+        "limit": {
+          "name": "Limit",
+          "description": "Return at most this many incidents, newest first."
+        },
+        "incident_type": {
+          "name": "Crime type",
+          "description": "Only incidents of these types, for example Stöld or Rån. Case is ignored."
+        },
+        "within_km": {
+          "name": "Within",
+          "description": "Only incidents this close to home, in kilometres."
         }
       }
     }

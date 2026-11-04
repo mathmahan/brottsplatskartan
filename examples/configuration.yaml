@@ -1,50 +1,26 @@
 # ---------------------------------------------------------------------------
-# Brottsplatskartan (local) — additions for configuration.yaml.
+# Brottsplatskartan (local) — optional additions for configuration.yaml.
 #
-# These are NOT dashboard cards (those are in ../dashboard.yaml) and NOT
-# automations (those are in ./automations.yaml, because a default Home
-# Assistant configuration already has `automation: !include automations.yaml`
-# and a second `automation:` key would make HA reject the whole config).
+# NOTHING HERE IS REQUIRED. The integration is configured entirely in the UI
+# under Settings -> Devices & services, and the nearest-incident distance and
+# the proximity flag are entities it provides, so the template sensors this
+# file used to carry are gone.
 #
-# Append these two keys to configuration.yaml and restart. If you already have
-# a `template:` or `recorder:` key, merge the items into the key you have
-# rather than adding a second one.
+# What is left is a convenience and a bit of housekeeping. Append to
+# configuration.yaml and restart. If you already have a `template:` or
+# `recorder:` key, merge the items into the key you have rather than adding a
+# second one — duplicate keys at the same level make Home Assistant reject the
+# whole configuration.
 #
-# The integration itself needs nothing here: it is configured in the UI under
-# Settings -> Devices & services.
+# These are NOT dashboard cards (../dashboard.yaml) and NOT automations
+# (./automations.yaml).
 # ---------------------------------------------------------------------------
 
+# Optional: one crime type on its own, for a gauge or a threshold automation.
+# Change "Stöld" to whichever type you care about — the count sensor's
+# `by_type` attribute lists what is available.
 template:
-  # Distance to the closest incident, derived from the geo_location markers,
-  # whose state is already the distance from home in km.
   - sensor:
-      - name: "Brottsplatskartan nearest incident"
-        unique_id: bpk_nearest_incident
-        unit_of_measurement: km
-        state_class: measurement
-        icon: mdi:map-marker-distance
-        state: >-
-          {% set m = states.geo_location
-               | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
-               | rejectattr('state', 'in', ['unknown', 'unavailable'])
-               | list %}
-          {{ (m | map(attribute='state') | map('float') | list | min)
-             if m else none }}
-        attributes:
-          headline: >-
-            {% set m = states.geo_location
-                 | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
-                 | rejectattr('state', 'in', ['unknown', 'unavailable'])
-                 | list | sort(attribute='state') %}
-            {{ m[0].attributes.headline if m else none }}
-          url: >-
-            {% set m = states.geo_location
-                 | selectattr('attributes.source', 'eq', 'brottsplatskartan_local')
-                 | rejectattr('state', 'in', ['unknown', 'unavailable'])
-                 | list | sort(attribute='state') %}
-            {{ m[0].attributes.url if m else none }}
-
-      # One crime type on its own, for a gauge or a threshold automation.
       - name: "Brottsplatskartan thefts"
         unique_id: bpk_thefts
         state_class: measurement
@@ -52,6 +28,7 @@ template:
           {{ (state_attr('sensor.brottsplatskartan_stockholm_incidents', 'by_type')
               or {}).get('Stöld', 0) }}
 
+# Housekeeping: keep the recorder database small.
 recorder:
   exclude:
     entity_globs:

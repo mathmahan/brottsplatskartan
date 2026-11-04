@@ -7,25 +7,23 @@ from typing import Any
 
 from homeassistant.components.geo_location import GeolocationEvent
 from homeassistant.const import UnitOfLength
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.util.location import distance as distance_in_metres
 
 from .api import Incident
-from .const import ATTRIBUTION, CONF_MAX_MARKERS, DOMAIN, LOGGER
-from .coordinator import BpkCoordinator
+from .const import ATTRIBUTION, DOMAIN, LOGGER
+from .coordinator import BpkConfigEntry, BpkCoordinator
 
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: BpkConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the geolocation markers for a config entry."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     manager = BpkGeoLocationManager(
-        hass, data["coordinator"], async_add_entities, data[CONF_MAX_MARKERS]
+        hass, data.coordinator, async_add_entities, data.max_markers
     )
     manager.async_setup()
     entry.async_on_unload(manager.async_shutdown)
@@ -96,7 +94,7 @@ class BpkGeoLocationManager:
             if (existing := self._entities.get(uid)) is not None:
                 existing.async_update_incident(incident)
                 continue
-            entity = BpkGeoLocationEvent(self._hass, incident)
+            entity = BpkGeoLocationEvent(incident)
             self._entities[uid] = entity
             new.append(entity)
 
@@ -125,12 +123,12 @@ class BpkGeoLocationEvent(GeolocationEvent):
     # which is thousands of orphans over a few months. The built-in feed
     # integrations (usgs_earthquakes_feed, gdacs) omit it for the same reason.
 
-    def __init__(self, hass: HomeAssistant, incident: Incident) -> None:
+    def __init__(self, incident: Incident) -> None:
         """Initialize the marker."""
         self._incident = incident
-        self._apply(hass, incident)
+        self._apply(incident)
 
-    def _apply(self, hass: HomeAssistant, incident: Incident) -> None:
+    def _apply(self, incident: Incident) -> None:
         """Copy the incident into the entity's geolocation fields."""
         self._incident = incident
         # Short label: the marker name is what shows on the map, and the full
@@ -144,19 +142,14 @@ class BpkGeoLocationEvent(GeolocationEvent):
         )
         self._attr_latitude = incident.latitude
         self._attr_longitude = incident.longitude
-
-        metres = distance_in_metres(
-            hass.config.latitude,
-            hass.config.longitude,
-            incident.latitude,
-            incident.longitude,
-        )
-        self._attr_distance = None if metres is None else round(metres / 1000, 2)
+        # Computed once by the coordinator, so the markers, the
+        # nearest-incident sensor and the proximity sensor cannot disagree.
+        self._attr_distance = incident.distance_km
 
     @callback
     def async_update_incident(self, incident: Incident) -> None:
         """Refresh the backing incident, in case the API revised it."""
-        self._apply(self.hass, incident)
+        self._apply(incident)
         self.async_write_ha_state()
 
     @property
@@ -171,6 +164,7 @@ class BpkGeoLocationEvent(GeolocationEvent):
                 ("type", incident.incident_type),
                 ("description", incident.description),
                 ("published", incident.published.isoformat()),
+                ("distance_km", incident.distance_km),
                 ("date_human", incident.date_human),
                 ("place", incident.place),
                 ("municipality", incident.municipality),

@@ -220,6 +220,33 @@ def main():
     check("every automations.yaml entry has a ui-editor counterpart",
           sorted({a["alias"] for a in autos} - ui_aliases), [])
 
+    # ---------------- no stale references ----------------
+    # The nearest-incident distance and the proximity flag used to be template
+    # sensors people had to write by hand. They are entities now, so no
+    # example may still point at the old hand-made ids.
+    retired = (
+        "sensor.brottsplatskartan_nearest_incident",
+        "sensor.brottsplatskartan_incident_nearby",
+    )
+    example_files = [
+        ROOT / "dashboard.yaml",
+        ROOT / "dashboard-simple.yaml",
+        ROOT / "examples" / "configuration.yaml",
+        ROOT / "examples" / "automations.yaml",
+        *sorted((ROOT / "examples" / "ui-editor").glob("*.yaml")),
+    ]
+    for path in example_files:
+        text = path.read_text()
+        check(f"{path.name}: no retired template-sensor ids",
+              [name for name in retired if name in text], [])
+
+    # The built-in entities should actually be used somewhere.
+    all_text = "\n".join(p.read_text() for p in example_files)
+    check("examples use the built-in nearest-incident sensor",
+          "_nearest_incident" in all_text, True)
+    check("examples use the built-in proximity binary sensor",
+          "_incident_nearby" in all_text, True)
+
     print()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED: {FAILURES}")

@@ -17,9 +17,9 @@
 # Prefer clicking to editing YAML? Use dashboard-simple.yaml instead: same
 # data, native cards only, no templates, fully editable in the visual editor.
 #
-# The last two cards need the template sensor from
-# examples/configuration.yaml. Without it they show as unavailable — delete
-# them if you skip that part.
+# Everything here uses entities the integration provides. No helpers, no
+# template sensors: the nearest-incident distance and the proximity flag are
+# built in, and the proximity radius is set in the integration's options.
 # ---------------------------------------------------------------------------
 
 views:
@@ -167,24 +167,29 @@ views:
         hours_to_show: 168
 
       # =====================================================================
-      # These two need the template sensor from examples/configuration.yaml
+      # OVERVIEW and PROXIMITY ALERT
       # =====================================================================
+      # These also take literal entity ids: an entities card's rows and a
+      # conditional card's conditions cannot be templates either.
       - type: entities
         title: Översikt
         entities:
           - entity: sensor.brottsplatskartan_stockholm_incidents
             name: Senaste dygnet
-          - entity: sensor.brottsplatskartan_nearest_incident
+          - entity: sensor.brottsplatskartan_stockholm_nearest_incident
             name: Närmaste händelse
+          - entity: binary_sensor.brottsplatskartan_stockholm_incident_nearby
+            name: Händelse i närheten
           - entity: sensor.brottsplatskartan_stockholm_latest_incident
             name: Senaste
 
-      # Only appears when something happened within 2 km.
+      # Only appears while the proximity sensor is on. The radius is set in
+      # the integration's options, not here.
       - type: conditional
         conditions:
-          - condition: numeric_state
-            entity: sensor.brottsplatskartan_nearest_incident
-            below: 2
+          - condition: state
+            entity: binary_sensor.brottsplatskartan_stockholm_incident_nearby
+            state: "on"
         card:
           type: markdown
           content: |-
@@ -192,6 +197,10 @@ views:
             {% set t_nearby = "Händelse" %}
             {% set t_away = "km bort" %}
             {#- ===== end of text ===== -#}
-            {% set s = 'sensor.brottsplatskartan_nearest_incident' %}
+            {% set found = integration_entities('brottsplatskartan_local')
+                 | select('search', '^sensor\..*_nearest_incident$') | list %}
+            {% set s = found[0] if found else '' %}
             ### ⚠️ {{ t_nearby }} {{ states(s) }} {{ t_away }}
-            {{ state_attr(s, 'headline') }}
+            {{ state_attr(s, 'title') }}
+
+            {{ state_attr(s, 'description') }}

@@ -2,18 +2,16 @@
 # Brottsplatskartan (local) — automations.
 #
 # These are list items for your existing automations.yaml (the file that
-# `automation: !include automations.yaml` points at). Append them to that
-# file, keeping the `- ` at this indentation. Do NOT wrap them in an
-# `automation:` key, and do not paste them into configuration.yaml.
+# `automation: !include automations.yaml` points at). Append them, keeping the
+# `- ` at this indentation. Do NOT wrap them in an `automation:` key, and do
+# not paste them into configuration.yaml.
 #
-# Alternatively, and more robustly: Settings -> Automations & scenes ->
-# Create automation -> ⋮ -> Edit in YAML, then paste one automation's body
-# without its leading `- `. Home Assistant assigns the id itself, and the
-# automation stays editable in the UI.
+# To add one through the UI instead, use the matching file in ./ui-editor/ —
+# the UI's YAML editor takes a single automation object, and pasting a list
+# into it fails with "not a valid option at '['0']'".
 #
 # Note: Home Assistant rewrites automations.yaml whenever you save an
-# automation in the UI editor. The automations survive, but these comments
-# will not.
+# automation in the UI. The automations survive, but these comments will not.
 #
 # Replace notify.mobile_app_your_phone with your own notify service.
 # ---------------------------------------------------------------------------
@@ -37,27 +35,24 @@
           image: "{{ trigger.event.data.image_wide }}"
           url: "{{ trigger.event.data.url }}"
 
-# Only notify for incidents close to home.
+# Something happened close to home. The radius lives in the integration's
+# options, so there is no distance maths here and no template sensor to set
+# up — just trigger on the binary sensor turning on.
 - id: brottsplatskartan_incident_nearby
-  alias: "Brottsplatskartan: incident within 1 km"
-  mode: queued
-  max: 10
+  alias: "Brottsplatskartan: incident nearby"
+  mode: single
   triggers:
-    - trigger: event
-      event_type: brottsplatskartan_local_new_incident
-  conditions:
-    - condition: template
-      value_template: >-
-        {% set lat = trigger.event.data.latitude %}
-        {% set lng = trigger.event.data.longitude %}
-        {{ lat is not none and lng is not none
-           and distance(lat, lng) is not none
-           and distance(lat, lng) | float < 1 }}
+    - trigger: state
+      entity_id: binary_sensor.brottsplatskartan_stockholm_incident_nearby
+      from: "off"
+      to: "on"
   actions:
     - action: notify.mobile_app_your_phone
       data:
         title: >-
-          {{ trigger.event.data.type }}
-          {{ distance(trigger.event.data.latitude,
-                      trigger.event.data.longitude) | round(1) }} km bort
-        message: "{{ trigger.event.data.title }}"
+          {{ state_attr(trigger.entity_id, 'type') }}
+          {{ state_attr(trigger.entity_id, 'distance_km') }} km bort
+        message: "{{ state_attr(trigger.entity_id, 'title') }}"
+        data:
+          image: "{{ state_attr(trigger.entity_id, 'image_wide') }}"
+          url: "{{ state_attr(trigger.entity_id, 'url') }}"

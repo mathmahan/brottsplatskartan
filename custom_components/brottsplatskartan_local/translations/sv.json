@@ -11,55 +11,170 @@
           "area": "API:et tar bara emot hela län. Avgränsningen till kommun görs i nästa steg."
         }
       },
-      "places": {
+      "settings": {
         "title": "Avgränsa",
-        "description": "Kommuner med händelser i {area} just nu: {found}.\n\nLämna fältet tomt för att räkna hela länet. Du kan också skriva in en stadsdel själv, till exempel Kungsholmen eller Södermalm — allt som API:et anger som del av en plats fungerar.",
+        "description": "Kommuner med händelser i {area} just nu: {found}.\n\nLämna platsfältet tomt för att räkna hela länet. Du kan också skriva in en stadsdel själv, till exempel Kungsholmen eller Södermalm — allt som API:et anger som del av en plats fungerar.",
         "data": {
           "municipalities": "Kommuner eller stadsdelar",
           "hours": "Tidsfönster",
           "update_interval": "Uppdateringsintervall",
-          "max_attribute_incidents": "Antal händelser i attribut",
-          "max_markers": "Högsta antal kartnålar",
-          "max_pages": "Högsta antal API-sidor per uppdatering"
+          "nearby_radius": "Radie för närhet"
         },
         "data_description": {
-          "municipalities": "Matchningen struntar i versaler och ändelserna kommun/stad. Jämförelsen är exakt, så en Stockholmsvägen i Nacka räknas inte som Stockholm.",
+          "municipalities": "Lämna tomt för hela länet. Matchningen struntar i versaler och ändelserna kommun/stad. Jämförelsen är exakt, så en Stockholmsvägen i Nacka räknas inte som Stockholm.",
           "hours": "Ett rullande fönster, så räknaren nollställs inte vid midnatt.",
           "update_interval": "API:et begränsar antalet anrop per installation. Fem minuter är lägsta tillåtna.",
-          "max_attribute_incidents": "Hur många händelser som läggs i sensorns attribut för kort på instrumentpanelen. 0 utelämnar listan.",
-          "max_markers": "Ett brett fönster över ett helt län kan ge hundratals händelser. De senaste behålls. 0 betyder ingen gräns.",
-          "max_pages": "Säkerhetsspärr för sidindelningen. Höj den om ett långt tidsfönster ser avkapat ut."
+          "nearby_radius": "Hur nära en händelse måste vara för att sensorn „Händelse i närheten” ska slå till."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Avancerat",
+            "description": "Du behöver normalt inte ändra dessa.",
+            "data": {
+              "max_attribute_incidents": "Antal händelser i attribut",
+              "max_markers": "Högsta antal kartnålar",
+              "max_pages": "Högsta antal API-sidor per uppdatering",
+              "location_keys": "Platsfält",
+              "app_id": "API-klient-id"
+            },
+            "data_description": {
+              "max_attribute_incidents": "Hur många händelser som läggs i sensorns attribut för kort på instrumentpanelen. 0 utelämnar listan.",
+              "max_markers": "Ett brett fönster över ett helt län kan ge hundratals händelser. De senaste behålls. 0 betyder ingen gräns.",
+              "max_pages": "Säkerhetsspärr för sidindelningen. Höj den om ett långt tidsfönster ser avkapat ut.",
+              "location_keys": "Vilka API-fält som tolkas som platsnamn. Ändra bara om API:et byter namn på dem och kommunfiltret slutar matcha.",
+              "app_id": "Identifierar den här installationen för API:ets anropsgräns. Ändra bara om du blir begränsad."
+            }
+          }
+        }
+      },
+      "reconfigure": {
+        "title": "Byt län",
+        "description": "Välj ett annat län för den här posten. Du får justera platser och övriga inställningar i nästa steg.",
+        "data": {
+          "area": "Län"
+        },
+        "data_description": {
+          "area": "API:et tar bara emot hela län. Avgränsningen till kommun görs i nästa steg."
+        }
+      },
+      "reconfigure_settings": {
+        "title": "Avgränsa",
+        "description": "Kommuner med händelser i {area} just nu: {found}.\n\nLämna platsfältet tomt för att räkna hela länet. Du kan också skriva in en stadsdel själv, till exempel Kungsholmen eller Södermalm — allt som API:et anger som del av en plats fungerar.",
+        "data": {
+          "municipalities": "Kommuner eller stadsdelar",
+          "hours": "Tidsfönster",
+          "update_interval": "Uppdateringsintervall",
+          "nearby_radius": "Radie för närhet"
+        },
+        "data_description": {
+          "municipalities": "Lämna tomt för hela länet. Matchningen struntar i versaler och ändelserna kommun/stad. Jämförelsen är exakt, så en Stockholmsvägen i Nacka räknas inte som Stockholm.",
+          "hours": "Ett rullande fönster, så räknaren nollställs inte vid midnatt.",
+          "update_interval": "API:et begränsar antalet anrop per installation. Fem minuter är lägsta tillåtna.",
+          "nearby_radius": "Hur nära en händelse måste vara för att sensorn „Händelse i närheten” ska slå till."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Avancerat",
+            "description": "Du behöver normalt inte ändra dessa.",
+            "data": {
+              "max_attribute_incidents": "Antal händelser i attribut",
+              "max_markers": "Högsta antal kartnålar",
+              "max_pages": "Högsta antal API-sidor per uppdatering",
+              "location_keys": "Platsfält",
+              "app_id": "API-klient-id"
+            },
+            "data_description": {
+              "max_attribute_incidents": "Hur många händelser som läggs i sensorns attribut för kort på instrumentpanelen. 0 utelämnar listan.",
+              "max_markers": "Ett brett fönster över ett helt län kan ge hundratals händelser. De senaste behålls. 0 betyder ingen gräns.",
+              "max_pages": "Säkerhetsspärr för sidindelningen. Höj den om ett långt tidsfönster ser avkapat ut.",
+              "location_keys": "Vilka API-fält som tolkas som platsnamn. Ändra bara om API:et byter namn på dem och kommunfiltret slutar matcha.",
+              "app_id": "Identifierar den här installationen för API:ets anropsgräns. Ändra bara om du blir begränsad."
+            }
+          }
         }
       }
     },
     "abort": {
-      "already_configured": "Den kombinationen av län och kommun finns redan."
+      "already_configured": "Det finns redan en post för det länet och de platserna.",
+      "reconfigure_successful": "Uppdaterad."
     },
     "error": {
-      "cannot_connect": "Kunde inte nå brottsplatskartan.se.",
-      "rate_limited": "brottsplatskartan.se begränsar antalet anrop från den här installationen. Försök igen senare."
+      "cannot_connect": "Kunde inte nå brottsplatskartan.se."
     }
   },
   "options": {
     "step": {
       "init": {
         "title": "Inställningar för Brottsplatskartan",
-        "description": "Bevakar {area}. Ändringar börjar gälla direkt — ingen omstart behövs.",
+        "description": "Bevakar {area}. Kommuner med händelser där just nu: {found}.\n\nÄndringar börjar gälla direkt — ingen omstart behövs.",
         "data": {
           "municipalities": "Kommuner eller stadsdelar",
           "hours": "Tidsfönster",
           "update_interval": "Uppdateringsintervall",
-          "max_attribute_incidents": "Antal händelser i attribut",
-          "max_markers": "Högsta antal kartnålar",
-          "max_pages": "Högsta antal API-sidor per uppdatering"
+          "nearby_radius": "Radie för närhet"
         },
         "data_description": {
-          "municipalities": "Lämna tomt för hela länet. Stadsdelar kan skrivas in manuellt.",
+          "municipalities": "Lämna tomt för hela länet. Matchningen struntar i versaler och ändelserna kommun/stad. Jämförelsen är exakt, så en Stockholmsvägen i Nacka räknas inte som Stockholm.",
           "hours": "Ett rullande fönster, så räknaren nollställs inte vid midnatt.",
-          "update_interval": "Minst fem minuter, för att hålla sig inom API:ets gräns.",
-          "max_attribute_incidents": "0 utelämnar händelselistan från sensorns attribut.",
-          "max_markers": "0 betyder ingen gräns.",
-          "max_pages": "Höj den om ett långt tidsfönster ser avkapat ut."
+          "update_interval": "API:et begränsar antalet anrop per installation. Fem minuter är lägsta tillåtna.",
+          "nearby_radius": "Hur nära en händelse måste vara för att sensorn „Händelse i närheten” ska slå till."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Avancerat",
+            "description": "Du behöver normalt inte ändra dessa.",
+            "data": {
+              "max_attribute_incidents": "Antal händelser i attribut",
+              "max_markers": "Högsta antal kartnålar",
+              "max_pages": "Högsta antal API-sidor per uppdatering",
+              "location_keys": "Platsfält",
+              "app_id": "API-klient-id"
+            },
+            "data_description": {
+              "max_attribute_incidents": "Hur många händelser som läggs i sensorns attribut för kort på instrumentpanelen. 0 utelämnar listan.",
+              "max_markers": "Ett brett fönster över ett helt län kan ge hundratals händelser. De senaste behålls. 0 betyder ingen gräns.",
+              "max_pages": "Säkerhetsspärr för sidindelningen. Höj den om ett långt tidsfönster ser avkapat ut.",
+              "location_keys": "Vilka API-fält som tolkas som platsnamn. Ändra bara om API:et byter namn på dem och kommunfiltret slutar matcha.",
+              "app_id": "Identifierar den här installationen för API:ets anropsgräns. Ändra bara om du blir begränsad."
+            }
+          }
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Det finns redan en post för det länet och de platserna."
+    }
+  },
+  "issues": {
+    "overlapping_entries": {
+      "title": "Två poster täcker samma händelser",
+      "description": "**{entry}** täcker delvis samma händelser som **{others}**.\n\nVarje post lägger till sin egen kartnål per händelse, så händelser som ingår i båda visas mer än en gång på kartan och räknas separat.\n\nDet är en giltig uppsättning om du menade det. Annars kan du ta bort den post du inte vill ha under Inställningar → Enheter och tjänster → Brottsplatskartan (local)."
+    },
+    "duplicate_entries": {
+      "title": "Dubbletter",
+      "description": "**{entry}** täcker exakt samma län och platser som **{other}**. En av dem är överflödig — ta bort den under Inställningar → Enheter och tjänster → Brottsplatskartan (local)."
+    }
+  },
+  "services": {
+    "refresh": {
+      "name": "Uppdatera nu",
+      "description": "Hämtar från brottsplatskartan.se direkt i stället för att vänta på nästa uppdatering."
+    },
+    "get_incidents": {
+      "name": "Hämta händelser",
+      "description": "Returnerar aktuella händelser som svarsdata, för användning i skript eller mallar. Begränsas inte av inställningen „Antal händelser i attribut”.",
+      "fields": {
+        "limit": {
+          "name": "Högst",
+          "description": "Returnera som mest så här många händelser, de senaste först."
+        },
+        "incident_type": {
+          "name": "Brottstyp",
+          "description": "Endast händelser av dessa typer, till exempel Stöld eller Rån. Versaler ignoreras."
+        },
+        "within_km": {
+          "name": "Inom",
+          "description": "Endast händelser så här nära hemmet, i kilometer."
         }
       }
     }

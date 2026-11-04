@@ -164,6 +164,30 @@ def main():
     check("county-only row has no place candidates", sorted(inc.places), [])
     check("county-only row has no municipality", inc.municipality, None)
 
+    # --- config entry identity (api.entry_unique_id) ---
+    # Order-independent, so a reordered municipality list cannot slip past the
+    # duplicate check and create a second entry over the same incidents.
+    uid = api.entry_unique_id
+    check("order does not change identity",
+          uid("Stockholms län", ["Solna", "Stockholm"]),
+          uid("Stockholms län", ["Stockholm", "Solna"]))
+    check("the kommun suffix does not change identity",
+          uid("Stockholms län", ["Stockholms kommun"]),
+          uid("Stockholms län", ["Stockholm"]))
+    check("case does not change identity",
+          uid("Stockholms län", ["STOCKHOLM"]), uid("Stockholms län", ["Stockholm"]))
+    check("repeats collapse",
+          uid("Stockholms län", ["Stockholm", "Stockholm"]),
+          uid("Stockholms län", ["Stockholm"]))
+    check("the county's own name is not a place",
+          uid("Stockholms län", ["Stockholms län"]), uid("Stockholms län", []))
+    check("a different place set is a different entry",
+          uid("Stockholms län", ["Stockholm"]) != uid("Stockholms län", ["Nacka"]), True)
+    check("whole county differs from a filtered entry",
+          uid("Stockholms län", []) != uid("Stockholms län", ["Stockholm"]), True)
+    check("a different county is a different entry",
+          uid("Stockholms län", []) != uid("Skåne län", []), True)
+
     print()
     if FAILURES:
         print(f"{len(FAILURES)} FAILED: {FAILURES}")

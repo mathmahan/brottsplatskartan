@@ -229,6 +229,10 @@ class Incident:
     date_human: str | None
     image: str | None = field(default=None, repr=False)
     image_wide: str | None = field(default=None, repr=False)
+    #: Kilometres from the Home Assistant home zone. Filled in by the
+    #: coordinator, which is the only layer that knows where home is; the
+    #: parser deliberately knows nothing about Home Assistant.
+    distance_km: float | None = field(default=None)
     #: Normalized place names this incident matches, used by the filter.
     places: frozenset[str] = field(default=frozenset(), repr=False)
     #: The same names as the API wrote them, for the diagnostic attribute.
@@ -252,6 +256,7 @@ class Incident:
             "location": self.location,
             "latitude": self.latitude,
             "longitude": self.longitude,
+            "distance_km": self.distance_km,
             "url": self.url,
             "source_url": self.source_url,
             "description": self.description,

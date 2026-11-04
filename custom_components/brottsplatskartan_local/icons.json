@@ -1,0 +1,6 @@
+{
+  "services": {
+    "refresh": "mdi:refresh",
+    "get_incidents": "mdi:format-list-bulleted"
+  }
+}

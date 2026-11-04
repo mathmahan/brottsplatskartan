@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 from homeassistant.components.event import EventEntity
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from .const import ATTRIBUTION, DOMAIN, EVENT_NEW_INCIDENT, LOGGER
-from .coordinator import BpkCoordinator
+from .const import ATTRIBUTION, EVENT_NEW_INCIDENT, LOGGER
+from .coordinator import BpkConfigEntry, BpkCoordinator
 from .sensor import device_info
 
 EVENT_TYPE_NEW_INCIDENT = "new_incident"
@@ -16,12 +15,13 @@ EVENT_TYPE_NEW_INCIDENT = "new_incident"
 
 async def async_setup_entry(
     hass: HomeAssistant,
-    entry: ConfigEntry,
+    entry: BpkConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up the event entity for a config entry."""
-    coordinator: BpkCoordinator = hass.data[DOMAIN][entry.entry_id]["coordinator"]
-    async_add_entities([BpkNewIncidentEvent(coordinator, entry)])
+    async_add_entities(
+        [BpkNewIncidentEvent(entry.runtime_data.coordinator, entry)]
+    )
 
 
 class BpkNewIncidentEvent(EventEntity):
@@ -34,7 +34,7 @@ class BpkNewIncidentEvent(EventEntity):
     _attr_should_poll = False
     _attr_event_types = [EVENT_TYPE_NEW_INCIDENT]
 
-    def __init__(self, coordinator: BpkCoordinator, entry: ConfigEntry) -> None:
+    def __init__(self, coordinator: BpkCoordinator, entry: BpkConfigEntry) -> None:
         """Initialize the event entity."""
         self._coordinator = coordinator
         self._attr_unique_id = f"{entry.entry_id}_new_incident"
